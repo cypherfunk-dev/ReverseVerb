@@ -25,8 +25,9 @@ te tape.
 4. [Presets](#presets)
 5. [Dónde ponerlo en tu cadena](#dónde-ponerlo-en-tu-cadena)
 6. [La pantalla](#la-pantalla)
-7. [Trucos y cosas que conviene saber](#trucos-y-cosas-que-conviene-saber)
-8. [Problemas frecuentes](#problemas-frecuentes)
+7. [Control por MIDI](#control-por-midi)
+8. [Trucos y cosas que conviene saber](#trucos-y-cosas-que-conviene-saber)
+9. [Problemas frecuentes](#problemas-frecuentes)
 
 ---
 
@@ -288,6 +289,56 @@ dice dónde están sin leer el número.
 marca en 0 dB y el tramo por encima en ámbar. No es un limitador, es un aviso:
 con feedback alto, shimmer y drive es fácil pasarse sin notarlo, porque las
 colas largas suben despacio y el oído se acostumbra.
+
+---
+
+## Control por MIDI
+
+Cualquier knob o botón se puede manejar con un pedal o controlador MIDI. Lo
+que más sentido tiene en directo: **Freeze con un pedal**, **Mix con uno de
+expresión**, y cambiar de preset con los botones de una pedalera.
+
+### Asignar un control
+
+1. **Clic derecho** sobre el knob o botón → **MIDI Learn**. La etiqueta pasa a
+   decir `· learn...`.
+2. Mueve el control físico (pisa el pedal, gira el knob). Queda asignado y la
+   etiqueta muestra `· CC 64` (o el número que sea).
+3. Para quitarlo: clic derecho → **Quitar CC n**.
+
+Al asignar no se aplica el valor: si pisas un pedal para asignarlo a Freeze,
+no se congela todavía.
+
+### Freeze: momentáneo o toggle
+
+Los botones (Freeze, Sync, Ping-Pong, Reverb Post) tienen dos modos, en el
+mismo menú de clic derecho:
+
+- **Momentáneo** (por defecto): el botón sigue al pedal. Con un pedal de
+  sustain, *pisar = Freeze, soltar = suelta*. Es el modo bueno para tocar.
+- **Toggle**: cada pulsación invierte. Para pedaleras que mandan un valor fijo
+  en cada pisada.
+
+### Presets desde una pedalera
+
+Un mensaje **Program Change** carga el preset de fábrica con ese número
+(0 = Swell clásico, 1 = Nube lenta… en el orden del desplegable).
+
+### Tap tempo
+
+Clic derecho sobre el control **Tempo** → **MIDI Learn (tap tempo)** y asigna
+un botón. Cada pulsación cuenta; a partir de la segunda se fija el tempo con
+la media de las últimas cuatro. Más de 2 s sin pulsar reinicia la cuenta.
+Solo tiene efecto cuando no hay DAW que mande el tempo.
+
+### Cómo le llega el MIDI en Ableton
+
+Un efecto de audio no recibe MIDI directamente. En una **pista MIDI**, pon
+tu controlador como entrada y en **MIDI To** elige la pista de audio donde
+está ReverseVerb y, en el segundo desplegable, **ReverseVerb**. Arma la pista
+MIDI (o activa el monitor en *In*).
+
+Las asignaciones se guardan con el proyecto.
 
 ---
 

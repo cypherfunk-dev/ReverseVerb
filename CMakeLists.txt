@@ -22,7 +22,10 @@ juce_add_plugin(ReverseVerb
     PLUGIN_MANUFACTURER_CODE    Crls          # 4 chars, primera en mayuscula
     PLUGIN_CODE                 Rvd1          # 4 chars, unico por plugin
     IS_SYNTH                    FALSE
-    NEEDS_MIDI_INPUT            FALSE
+    # TRUE: CC -> parametros (MIDI Learn), Program Change -> presets y tap
+    # tempo. En Ableton se le manda MIDI desde una pista MIDI con "MIDI To"
+    # apuntando a la pista de audio > ReverseVerb.
+    NEEDS_MIDI_INPUT            TRUE
     NEEDS_MIDI_OUTPUT           FALSE
     IS_MIDI_EFFECT              FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
@@ -37,7 +40,8 @@ juce_add_plugin(ReverseVerb
 target_sources(ReverseVerb PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
-    Source/PresetManager.cpp)
+    Source/PresetManager.cpp
+    Source/MidiControl.cpp)
 
 target_include_directories(ReverseVerb PRIVATE Source)
 

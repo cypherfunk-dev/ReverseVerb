@@ -7,6 +7,7 @@
 #include "Ducker.h"
 #include "TapeMod.h"
 #include "PresetManager.h"
+#include "MidiControl.h"
 #include <atomic>
 #include <limits>
 #include <vector>
@@ -33,7 +34,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override   { return false; }
+    bool acceptsMidi() const override   { return true; }    // CC, PC y tap tempo
     bool producesMidi() const override  { return false; }
     bool isMidiEffect() const override  { return false; }
     /** Con Freeze la cola es literalmente infinita; algunos hosts recortan el
@@ -54,6 +55,7 @@ public:
     void applyFactoryPreset (int index);
 
     PresetManager& getPresets() noexcept { return presetManager; }
+    MidiControl&   getMidi()    noexcept { return midiControl; }
 
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
@@ -87,7 +89,12 @@ private:
                      std::atomic<float>* divParam) const;
 
     PresetManager presetManager { apvts };
+    MidiControl   midiControl   { *this };
     int currentProgram = 0;
+
+    // Contador de muestras procesadas: marca de tiempo de los eventos MIDI
+    // (tap tempo). Solo lo toca el hilo de audio.
+    juce::int64 sampleClock = 0;
 
     std::vector<ReverseDelay> delays;      // un estado por canal
     StereoDelay               echo;

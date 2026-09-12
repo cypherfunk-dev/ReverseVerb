@@ -428,6 +428,13 @@ ReverseVerbEditor::ReverseVerbEditor (ReverseVerbProcessor& p)
     syncButton  .onClick = [this] { updateEnablement(); };
     freezeButton.onClick = [this] { updateEnablement(); };
     dSyncButton.onClick  = [this] { updateEnablement(); };
+
+    syncButton  .onRightClick = [this] { showMidiMenu ("sync"); };
+    freezeButton.onRightClick = [this] { showMidiMenu ("freeze"); };
+    dSyncButton .onRightClick = [this] { showMidiMenu ("dsync"); };
+    pingButton  .onRightClick = [this] { showMidiMenu ("pingpong"); };
+    postButton  .onRightClick = [this] { showMidiMenu ("revpost"); };
+    tempoSlider .onRightClick = [this] { showMidiMenu (MidiControl::kTapTempo); };
     routingBox .onChange = [this] { updateEnablement(); };
 
     updateEnablement();
@@ -492,6 +499,10 @@ void ReverseVerbEditor::addKnob (Knob& k, const juce::String& paramID, const juc
     k.label.setFont (juce::FontOptions (12.0f, juce::Font::bold));
     content.addAndMakeVisible (k.label);
 
+    k.paramID  = paramID;
+    k.baseText = text;
+    k.slider.onRightClick = [this, paramID] { showMidiMenu (paramID); };
+
     k.att = std::make_unique<SliderAtt> (proc.apvts, paramID, k.slider);
 }
 
@@ -533,7 +544,7 @@ void ReverseVerbEditor::updateEnablement()
     // pensando que el efecto esta roto.
     const bool stereo = proc.visStereo.load();
     pingButton.setEnabled (on && stereo);
-    pingButton.setButtonText (stereo ? "Ping-Pong" : "Ping-Pong (mono)");
+    pingButton.setButtonText ((stereo ? "Ping-Pong" : "Ping-Pong (mono)") + midiSuffix ("pingpong"));
 
     // Con host, el BPM lo pone el; el control manual desaparece para no
     // sugerir que se puede cambiar algo que no se puede.
@@ -605,6 +616,83 @@ int ReverseVerbEditor::presetIdForName (const juce::String& name) const
 
     const int idx = proc.getPresets().getUserPresetNames().indexOf (name);
     return idx >= 0 ? userIdBase + idx : 0;
+}
+
+//==============================================================================
+juce::String ReverseVerbEditor::midiSuffix (const juce::String& target) const
+{
+    auto& midi = proc.getMidi();
+    if (midi.isLearning (target))
+        return juce::CharPointer_UTF8 (" \xc2\xb7 learn...");
+
+    const int cc = midi.ccFor (target);
+    return cc >= 0 ? juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 CC ")) + juce::String (cc)
+                   : juce::String();
+}
+
+void ReverseVerbEditor::syncMidiLabels()
+{
+    for (auto* k : { &length, &revFb, &drive, &driveEnv, &revLow, &revHigh,
+                     &dTime, &dFb, &dLow, &dHigh, &dMod, &dModRate,
+                     &wow, &flutter, &detune, &shimmer, &shimPitch,
+                     &revAmt, &revSize, &revDamp, &mix, &duck, &duckRel })
+        k->label.setText (k->baseText + midiSuffix (k->paramID), juce::dontSendNotification);
+
+    syncButton  .setButtonText ("Sync"   + midiSuffix ("sync"));
+    freezeButton.setButtonText ("Freeze" + midiSuffix ("freeze"));
+    dSyncButton .setButtonText ("Sync"   + midiSuffix ("dsync"));
+    postButton  .setButtonText ("Reverb despues del reverse" + midiSuffix ("revpost"));
+    tempoLabel  .setText ("Tempo" + midiSuffix (MidiControl::kTapTempo), juce::dontSendNotification);
+    // pingButton lo pone updateEnablement, que ya le anade el sufijo.
+}
+
+void ReverseVerbEditor::showMidiMenu (const juce::String& target)
+{
+    auto& midi = proc.getMidi();
+    const int  cc       = midi.ccFor (target);
+    const bool learning = midi.isLearning (target);
+    const bool isTap    = target == MidiControl::kTapTempo;
+
+    bool isBool = false;
+    if (! isTap)
+        if (auto* p = proc.apvts.getParameter (target))
+            isBool = dynamic_cast<juce::AudioParameterBool*> (p) != nullptr;
+
+    enum { learn = 1, cancel, remove, momentary, toggle };
+
+    juce::PopupMenu m;
+    if (learning)
+        m.addItem (cancel, "Cancelar MIDI Learn");
+    else
+        m.addItem (learn, isTap ? "MIDI Learn (tap tempo)" : "MIDI Learn");
+
+    if (cc >= 0)
+        m.addItem (remove, "Quitar CC " + juce::String (cc));
+
+    if (isBool && cc >= 0)
+    {
+        const auto mode = midi.modeFor (target);
+        m.addSeparator();
+        m.addItem (momentary, "Momentaneo (pisar = on)", true, mode == MidiControl::Mode::momentary);
+        m.addItem (toggle,    "Toggle (cada pulsacion invierte)", true, mode == MidiControl::Mode::toggle);
+    }
+
+    m.showMenuAsync (juce::PopupMenu::Options(),   // en la posicion del raton
+                     [this, target] (int r)
+    {
+        auto& mc = proc.getMidi();
+        switch (r)
+        {
+            case learn:     mc.startLearn (target); break;
+            case cancel:    mc.cancelLearn(); break;
+            case remove:    mc.clearMapping (target); break;
+            case momentary: mc.setMode (target, MidiControl::Mode::momentary); break;
+            case toggle:    mc.setMode (target, MidiControl::Mode::toggle); break;
+            default: break;
+        }
+        syncMidiLabels();
+        updateEnablement();
+    });
 }
 
 void ReverseVerbEditor::stepPreset (int delta)

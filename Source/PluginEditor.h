@@ -17,6 +17,37 @@ public:
 };
 
 //==============================================================================
+/** Slider y ToggleButton que ceden el clic DERECHO a un callback (el menu de
+    MIDI Learn) en vez de arrastrar o conmutar. Sin esto, un Slider sin menu
+    propio empieza un arrastre con el boton derecho, y un Button dispara el
+    clic al soltarlo. */
+struct MidiSlider : public juce::Slider
+{
+    std::function<void()> onRightClick;
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu()) { if (onRightClick) onRightClick(); return; }
+        juce::Slider::mouseDown (e);
+    }
+    void mouseDrag (const juce::MouseEvent& e) override { if (! e.mods.isPopupMenu()) juce::Slider::mouseDrag (e); }
+    void mouseUp   (const juce::MouseEvent& e) override { if (! e.mods.isPopupMenu()) juce::Slider::mouseUp (e); }
+};
+
+struct MidiToggle : public juce::ToggleButton
+{
+    using juce::ToggleButton::ToggleButton;
+    std::function<void()> onRightClick;
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu()) { if (onRightClick) onRightClick(); return; }
+        juce::ToggleButton::mouseDown (e);
+    }
+    void mouseUp (const juce::MouseEvent& e) override { if (! e.mods.isPopupMenu()) juce::ToggleButton::mouseUp (e); }
+};
+
+//==============================================================================
 /** Agujero de gusano. La estetica es deliberada, pero NO es decoracion pura:
 
       - Las dos particulas que orbitan la boca son los dos granos. Su brillo es
@@ -91,8 +122,9 @@ private:
 
     struct Knob
     {
-        juce::Slider slider;
+        MidiSlider   slider;
         juce::Label  label;
+        juce::String paramID, baseText;   // el texto sin el sufijo " · CC n"
         std::unique_ptr<SliderAtt> att;
     };
 
@@ -110,7 +142,15 @@ private:
         cargar un preset, se marca con un asterisco. */
     void syncPresetDisplay();
     int  presetIdForName (const juce::String& name) const;
-    void timerCallback() override { updateEnablement(); syncPresetDisplay(); }
+
+    /** Menu de clic derecho: MIDI Learn / quitar / modo (para booleanos). */
+    void showMidiMenu (const juce::String& target);
+    /** " · CC 64", " · learn" o nada, para pegar a etiquetas y botones. */
+    juce::String midiSuffix (const juce::String& target) const;
+    /** Refresca los sufijos MIDI de todos los knobs y botones. */
+    void syncMidiLabels();
+
+    void timerCallback() override { updateEnablement(); syncPresetDisplay(); syncMidiLabels(); }
 
     void refreshPresetList (int idToSelect = 0);
     void stepPreset (int delta);
@@ -128,16 +168,17 @@ private:
     Knob wow, flutter, detune, shimmer, shimPitch;
     Knob revAmt, revSize, revDamp, mix, duck, duckRel;
 
-    juce::ToggleButton syncButton   { "Sync" };
-    juce::ToggleButton freezeButton { "Freeze" };
-    juce::ToggleButton dSyncButton { "Sync" };
-    juce::ToggleButton pingButton  { "Ping-Pong" };
-    juce::ToggleButton postButton  { "Reverb despues del reverse" };
-    juce::ComboBox     divisionBox, dDivisionBox, routingBox;
+    MidiToggle syncButton   { "Sync" };
+    MidiToggle freezeButton { "Freeze" };
+    MidiToggle dSyncButton  { "Sync" };
+    MidiToggle pingButton   { "Ping-Pong" };
+    MidiToggle postButton   { "Reverb despues del reverse" };
+    juce::ComboBox divisionBox, dDivisionBox, routingBox;
 
     // Tempo manual. Solo se ve cuando el host no da BPM (Standalone): con host
-    // el valor sale en el visualizador y este control sobraria.
-    juce::Slider tempoSlider;
+    // el valor sale en el visualizador y este control sobraria. Su clic
+    // derecho asigna el TAP TEMPO, no el valor.
+    MidiSlider   tempoSlider;
     juce::Label  tempoLabel;
     std::unique_ptr<SliderAtt> tempoAtt;
 

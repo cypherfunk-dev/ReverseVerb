@@ -22,8 +22,9 @@ Si solo quieres usarlo, lo que buscas está en el [README](README.md).
 13. [Delay estéreo](#delay-estéreo)
 14. [Configuración de buses](#configuración-de-buses)
 15. [Presets y estado](#presets-y-estado)
-16. [Interfaz y coste de CPU](#interfaz-y-coste-de-cpu)
-17. [Bugs encontrados y lecciones](#bugs-encontrados-y-lecciones)
+16. [MIDI](#midi)
+17. [Interfaz y coste de CPU](#interfaz-y-coste-de-cpu)
+18. [Bugs encontrados y lecciones](#bugs-encontrados-y-lecciones)
 
 ---
 
@@ -218,6 +219,7 @@ Source/
   PluginProcessor.{h,cpp}   APVTS, parámetros, ruteo, bus layout
   PluginEditor.{h,cpp}      GUI: visualizador polar, knobs, medidores
   PresetManager.{h,cpp}     24 presets de fábrica + presets de usuario en %APPDATA%
+  MidiControl.{h,cpp}       CC -> parámetro (learn), Program Change -> preset, tap tempo
   Interp.h                  Hermite de 4 puntos para lecturas fraccionarias
   ReverseDelay.h            motor de reverse (granular, 2 granos, lectura fraccionaria)
   StereoDelay.h             delay estéreo con ping-pong y modulación
@@ -669,6 +671,68 @@ cambie el rango de un parámetro y haya que migrar el valor guardado.
 Todos los parámetros booleanos usan esta subclase en lugar de
 `AudioParameterBool`. Ver [Bug 3](#bug-3-booleanos-que-no-se-restauraban-pluginval)
 para el motivo.
+
+---
+
+## MIDI
+
+`MidiControl.h/.cpp`. `NEEDS_MIDI_INPUT TRUE` y `acceptsMidi()` devuelve
+true; no se produce MIDI.
+
+### Nada se aplica en el hilo de audio
+
+`setValueNotifyingHost()` avisa al host y en VST3 eso (`performEdit`) tiene
+que salir del hilo de interfaz. Así que `processBlock` solo hace
+`midiControl.push(midi, sampleClock)`: filtra CC y Program Change, los mete
+en un `AbstractFifo` de 512 con su posición en muestras, y dispara un
+`AsyncUpdater`. Toda la lógica —tabla de mapeos, learn, modos, tap tempo,
+program change— corre en `handleAsyncUpdate()` en el hilo de mensajes. La
+latencia extra es la del bucle de mensajes (unos ms), indistinguible con un
+pedal.
+
+Consecuencia cómoda: la tabla es un `std::map<int cc, Mapping>` que solo toca
+un hilo. Sin atómicos.
+
+El push va **antes** del troceado de bloques grandes, y los trozos reciben un
+`MidiBuffer` vacío para no encolar lo mismo varias veces. `sampleClock`
+avanza al final del bloque real.
+
+### Mapeos y modos
+
+Un destino (paramID, o `"@tap"` para el tap tempo) tiene como mucho un CC;
+al aprender uno nuevo se borra el anterior. Al aprender **no** se aplica el
+valor del CC que llega.
+
+| Modo | Para | Comportamiento |
+|---|---|---|
+| `continuous` | float y choice | `valor / 127` normalizado |
+| `momentary` | bool (default) | `>= 64` → on, si no off. Pedal de sustain = pisar-para-congelar |
+| `toggle` | bool | cada flanco de subida invierte |
+
+Cada aplicación va entre `beginChangeGesture` / `endChangeGesture` para que
+el host la pueda grabar como automatización.
+
+### Tap tempo
+
+Se mide en **muestras** (contador del procesador + offset del evento en el
+bloque). Medirlo al recibir en el hilo de mensajes metería el jitter del
+bucle, que a 120 BPM es un 1–2 % de error. Media de los últimos 4 intervalos;
+más de 2 s sin tap reinicia. Escribe el parámetro `tempo`, así que solo tiene
+efecto sin host.
+
+### Estado
+
+Los mapeos van en un hijo `<MIDI><CC number target mode/></MIDI>` del XML de
+estado. `setStateInformation` lo lee y lo **quita** antes de `replaceState`,
+para que APVTS no lo arrastre en su árbol.
+
+### GUI
+
+`MidiSlider` y `MidiToggle` (en `PluginEditor.h`) interceptan el clic derecho
+y llaman a `onRightClick` en vez de arrastrar/conmutar: un `Slider` sin menú
+propio empieza un arrastre con el botón derecho y un `Button` dispara el clic
+al soltar. El menú es `showMidiMenu(target)`; las etiquetas llevan el sufijo
+` · CC n` o ` · learn...` que refresca `syncMidiLabels()` a 4 Hz.
 
 ---
 

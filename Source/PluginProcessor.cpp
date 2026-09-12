@@ -249,6 +249,8 @@ void ReverseVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     modCurve  .assign (static_cast<size_t> (juce::jmax (1, samplesPerBlock)), 0.0f);
 
     tape.prepare (sampleRate);
+    midiControl.prepare (sampleRate);
+    sampleClock = 0;
 
     wetBuffer.setSize (numCh, juce::jmax (1, samplesPerBlock));
     parBuffer.setSize (numCh, juce::jmax (1, samplesPerBlock));
@@ -329,6 +331,11 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     const int numOut     = getTotalNumOutputChannels();
     const int numCh      = juce::jmin (numOut, static_cast<int> (delays.size()));
 
+    // El MIDI se encola aqui, una vez por bloque del host, y se procesa en el
+    // hilo de mensajes (ver MidiControl). Los trozos de la recursion de abajo
+    // reciben un buffer vacio para no encolar lo mismo varias veces.
+    midiControl.push (midi, sampleClock);
+
     // Algunos hosts mandan bloques vacios (Reaper parado, renders offline).
     // Sin esto, mas abajo se leeria driveCurve[numSamples - 1] con indice -1.
     if (numSamples <= 0)
@@ -344,12 +351,13 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         if (capacity <= 0)
             return;   // prepareToPlay no se ha llamado: no hay donde procesar
 
+        juce::MidiBuffer none;
         for (int start = 0; start < numSamples; start += capacity)
         {
             const int len = juce::jmin (capacity, numSamples - start);
             juce::AudioBuffer<float> sub (buffer.getArrayOfWritePointers(),
                                           buffer.getNumChannels(), start, len);
-            processBlock (sub, midi);
+            processBlock (sub, none);
         }
         return;
     }
@@ -639,6 +647,7 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     visPhase.store (delays[0].phaseNormA());
     visDuckGain.store (lastDuck);
+    sampleClock += numSamples;
 
     // --- medidores --------------------------------------------------------
     // Pico del bloque con caida exponencial. La caida se aplica una vez por
@@ -709,6 +718,7 @@ void ReverseVerbProcessor::getStateInformation (juce::MemoryBlock& destData)
         xml->setAttribute ("version",    kStateVersion);
         xml->setAttribute ("program",    currentProgram);
         xml->setAttribute ("presetName", presetManager.currentName);
+        xml->addChildElement (midiControl.toXml().release());   // mapeos CC
         copyXmlToBinary (*xml, destData);
     }
 }
@@ -723,6 +733,15 @@ void ReverseVerbProcessor::setStateInformation (const void* data, int sizeInByte
             // acabamos de cargar ya trae los valores buenos.
             currentProgram = xml->getIntAttribute ("program", 0);
             presetManager.currentName = xml->getStringAttribute ("presetName", "Init");
+
+            // Los mapeos MIDI van en un hijo propio que APVTS no conoce: se
+            // leen y se quitan antes de restaurar los parametros, para que no
+            // se cuelen en el arbol de estado.
+            if (auto* m = xml->getChildByName ("MIDI"))
+            {
+                midiControl.fromXml (*m);
+                xml->removeChildElement (m, true);
+            }
 
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
 
