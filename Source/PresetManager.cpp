@@ -244,6 +244,29 @@ namespace
 }
 
 //==============================================================================
+PresetManager::PresetManager (juce::AudioProcessorValueTreeState& state) : apvts (state)
+{
+    // Se escucha TODO para saber si el usuario toco algo tras cargar un preset.
+    // Los parametros ya existen aqui: apvts se construye antes que este objeto.
+    for (auto* p : apvts.processor.getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+            apvts.addParameterListener (rp->paramID, this);
+}
+
+PresetManager::~PresetManager()
+{
+    for (auto* p : apvts.processor.getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+            apvts.removeParameterListener (rp->paramID, this);
+}
+
+void PresetManager::parameterChanged (const juce::String&, float)
+{
+    if (! loading.load())
+        dirty.store (true);
+}
+
+//==============================================================================
 int PresetManager::getNumFactoryPresets() { return kNumFactory; }
 
 juce::String PresetManager::getFactoryPresetName (int index)
@@ -272,12 +295,15 @@ void PresetManager::loadFactoryPreset (int index)
     if (! juce::isPositiveAndBelow (index, kNumFactory))
         return;
 
+    loading.store (true);
     resetToDefaults();
 
     for (const auto& v : kFactory[index].values)
         setParam (v.id, v.value);
 
     currentName = kFactory[index].name;
+    loading.store (false);
+    dirty.store (false);
 }
 
 //==============================================================================
@@ -319,6 +345,7 @@ bool PresetManager::saveUserPreset (const juce::String& name)
         if (xml->writeTo (file))
         {
             currentName = clean;
+            dirty.store (false);
             return true;
         }
     }
@@ -334,7 +361,10 @@ bool PresetManager::loadUserPreset (const juce::String& name)
     {
         if (xml->hasTagName (apvts.state.getType()))
         {
+            loading.store (true);
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            loading.store (false);
+            dirty.store (false);
             currentName = name;
             return true;
         }

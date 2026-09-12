@@ -258,7 +258,12 @@ public:
 
             fb = std::tanh (drive * fb) / drive;   // ganancia maxima = 1 exacta
 
-            buffer[static_cast<size_t> (writePos)] = input + fb;
+            // Un NaN que entre una sola vez (del host, de un filtro) se
+            // quedaria dando vueltas en el lazo para siempre, y Freeze lo
+            // conservaria. Se corta aqui, en lo unico que se escribe al buffer.
+            float w = input + fb;
+            if (! std::isfinite (w)) w = 0.0f;
+            buffer[static_cast<size_t> (writePos)] = w;
         }
 
         const float out = read (a) + read (b);

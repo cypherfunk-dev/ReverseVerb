@@ -551,13 +551,55 @@ void ReverseVerbEditor::refreshPresetList (int idToSelect)
     delBtn.setEnabled (presetBox.getSelectedId() >= userIdBase);
 }
 
+void ReverseVerbEditor::syncPresetDisplay()
+{
+    const auto name  = proc.getPresets().currentName;
+    const bool dirty = proc.getPresets().isDirty();
+
+    if (name == shownName && dirty == shownDirty)
+        return;
+
+    shownName  = name;
+    shownDirty = dirty;
+
+    // Con cambios encima, el combo no "es" ningun preset: se deselecciona y
+    // se muestra el nombre con asterisco como texto de fondo.
+    if (dirty)
+    {
+        presetBox.setTextWhenNothingSelected (name + " *");
+        presetBox.setSelectedId (0, juce::dontSendNotification);
+        delBtn.setEnabled (false);
+        return;
+    }
+
+    presetBox.setTextWhenNothingSelected (name);
+
+    const int idToSelect = presetIdForName (name);
+    presetBox.setSelectedId (idToSelect, juce::dontSendNotification);
+    delBtn.setEnabled (idToSelect >= userIdBase);
+}
+
+int ReverseVerbEditor::presetIdForName (const juce::String& name) const
+{
+    for (int i = 0; i < PresetManager::getNumFactoryPresets(); ++i)
+        if (PresetManager::getFactoryPresetName (i) == name)
+            return i + 1;
+
+    const int idx = proc.getPresets().getUserPresetNames().indexOf (name);
+    return idx >= 0 ? userIdBase + idx : 0;
+}
+
 void ReverseVerbEditor::stepPreset (int delta)
 {
     const int n = presetBox.getNumItems();
     if (n <= 0)
         return;
 
-    int idx = presetBox.getSelectedItemIndex() + delta;
+    int cur = presetBox.getSelectedItemIndex();
+    if (cur < 0)   // modificado (nada seleccionado): partir del preset de debajo
+        cur = presetBox.indexOfItemId (presetIdForName (proc.getPresets().currentName));
+
+    int idx = cur + delta;
     idx = juce::jlimit (0, n - 1, idx);
 
     presetBox.setSelectedItemIndex (idx, juce::sendNotificationSync);

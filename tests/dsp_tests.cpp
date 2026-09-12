@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <cstdio>
 #include <cstring>
 #include <chrono>
@@ -577,25 +578,23 @@ void testDelayStability()
     const int sr = 48000;
     const std::vector<float> hps = fullSweep ? std::vector<float>{20.f,200.f,2000.f} : std::vector<float>{20.f,500.f};
     const std::vector<float> lps = fullSweep ? std::vector<float>{200.f,2000.f,20000.f} : std::vector<float>{1000.f,20000.f};
-    const std::vector<float> drs = fullSweep ? std::vector<float>{1.f,4.f,8.f} : std::vector<float>{1.f,8.f};
     const std::vector<int>   dts = fullSweep ? std::vector<int>{sr/50, sr/2, sr*2} : std::vector<int>{sr/50, sr/2};
 
     const int secs = fullSweep ? 62 : 32;
     const int tailFrom = (secs - 1) * sr;
-    const int totalCombos = (int) (2 * hps.size() * lps.size() * drs.size() * dts.size());
+    const int totalCombos = (int) (2 * hps.size() * lps.size() * dts.size());
     int combo = 0;
     double worstTail = 0.0;
     bool   bad = false;
 
     for (bool pp : { false, true })
-    for (float hp : hps) for (float lp : lps) for (float dr : drs) for (int D : dts)
+    for (float hp : hps) for (float lp : lps) for (int D : dts)
     {
         progress (++combo, totalCombos);
         StereoDelay d;
         d.prepare (sr * 2, sr, 2, (float) D);
         d.setTone (hp, lp);
         d.setPingPong (pp);
-        d.setDrive (dr);
 
         Noise rng; double tail = 0.0;
         for (int n = 0; n < secs * sr; ++n)
@@ -732,6 +731,50 @@ void testDucker()
 
     check ("ducker atenua y vuelve", attacked < 0.1f && released > 0.95f,
            "con senal " + f (attacked, 3) + ", tras silencio " + f (released, 3));
+
+    // El ducking es RELATIVO al nivel de entrada: una DI a -20 dBFS tiene que
+    // atenuar igual que una senal a 0 dBFS. Antes, con el x3 fijo, a 0.1 de
+    // amplitud solo se llegaba a un tercio de la atenuacion pedida.
+    Ducker quiet;
+    quiet.prepare (sr);
+    quiet.setRelease (200.0f);
+    for (int n = 0; n < sr / 20; ++n) g = quiet.process (0.1f, 1.0f);
+    const float quietAttacked = g;
+
+    // ...pero el ruido de fondo (por debajo de -26 dBFS) NO cuenta como senal.
+    Ducker noise;
+    noise.prepare (sr);
+    for (int n = 0; n < sr / 20; ++n) g = noise.process (0.005f, 1.0f);
+    const float noiseAttacked = g;
+
+    check ("ducker independiente del nivel", quietAttacked < 0.1f && noiseAttacked > 0.85f,
+           "a -20 dBFS " + f (quietAttacked, 3) + ", con ruido a -46 dBFS " + f (noiseAttacked, 3));
+}
+
+/** Un NaN que entre UNA vez no puede quedarse a vivir en el lazo. */
+void testNaNFlush()
+{
+    const int sr = 48000;
+    ReverseDelay rd; rd.prepare (sr, sr / 100, sr);
+    StereoDelay  sd; sd.prepare (sr, sr, 2, 100.0f);
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    rd.process (nan, 0.5f);
+    float l = nan, r = nan;
+    sd.process (l, r, 0.5f);
+
+    bool bad = false;
+    for (int n = 0; n < sr; ++n)
+    {
+        const float a = rd.process (0.0f, 0.5f);
+        l = 0.0f; r = 0.0f;
+        sd.process (l, r, 0.5f);
+        if (! std::isfinite (a) || ! std::isfinite (l) || ! std::isfinite (r)) bad = true;
+    }
+
+    check ("un NaN de entrada no se queda en el lazo", ! bad,
+           bad ? "el lazo sigue devolviendo NaN un segundo despues"
+               : "salida finita durante 1 s tras inyectar NaN");
 }
 
 void testOnePole()
@@ -763,7 +806,6 @@ void testNoNaN()
 
     StereoDelay sd; sd.prepare (sr, sr, 2, 3.0f);
     sd.setTone (2000.0f, 200.0f);
-    sd.setDrive (8.0f);
 
     bool bad = false;
     for (int n = 0; n < sr * 4; ++n)
@@ -826,6 +868,7 @@ int main (int argc, char** argv)
 
     section ("AUXILIARES");
     testDucker();
+    testNaNFlush();
     testOnePole();
     testNoNaN();
 

@@ -54,6 +54,7 @@ namespace
     constexpr float kMinMs   = 20.0f;
     constexpr float kMaxMs   = 2000.0f;
     constexpr float kMaxDrive = 8.0f;
+    constexpr int   kStateVersion = 1;
 
     // Multiplicadores en NEGRAS. Una negra dura 60000/BPM ms.
     const float kDivMul[] = { 4.0f, 2.0f, 1.5f, 1.0f, 2.0f/3.0f,
@@ -247,11 +248,19 @@ void ReverseVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     reverb.setSampleRate (sampleRate);
     reverb.reset();
 
-    mixSmoothed.reset (sampleRate, 0.02);
-    mixSmoothed.setCurrentAndTargetValue (pMix->load() * 0.01f);
+    const float mix0 = pMix->load() * 0.01f;
+    drySmoothed.reset (sampleRate, 0.02);
+    wetSmoothed.reset (sampleRate, 0.02);
+    drySmoothed.setCurrentAndTargetValue (1.0f - mix0);
+    wetSmoothed.setCurrentAndTargetValue (mix0);
 
-    revFbSm  = pFeedback->load() * 0.01f;
-    echoFbSm = pDFeed->load()    * 0.01f;
+    revFbSm   = pFeedback->load() * 0.01f;
+    echoFbSm  = pDFeed->load()    * 0.01f;
+    revAmtSm  = pRevAmt->load()   * 0.01f;
+    revSizeSm = pRevSize->load()  * 0.01f;
+    revDampSm = pRevDamp->load()  * 0.01f;
+    reverbActive = revAmtSm > 0.0001f;
+    bypassed     = false;
 
     // NOTA DELIBERADA: no se llama a setLatencySamples().
     // El desfase de una ventana ES el efecto. Si lo reportaramos, el host
@@ -283,7 +292,25 @@ bool ReverseVerbProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
     return out.size() >= in.size();
 }
 
-void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+float ReverseVerbProcessor::blockSmooth (float current, float target,
+                                         int numSamples, float seconds) const noexcept
+{
+    // Un polo evaluado una vez por bloque. El coeficiente sale del numero de
+    // muestras del bloque, asi que 50 ms son 50 ms tanto a 64 como a 2048.
+    const float k = 1.0f - std::exp (-static_cast<float> (numSamples)
+                                     / (seconds * static_cast<float> (currentSampleRate)));
+    return current + k * (target - current);
+}
+
+void ReverseVerbProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer,
+                                                 juce::MidiBuffer& midi)
+{
+    bypassed = true;
+    processBlock (buffer, midi);
+    bypassed = false;
+}
+
+void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
 
@@ -291,6 +318,31 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     const int numIn      = getTotalNumInputChannels();
     const int numOut     = getTotalNumOutputChannels();
     const int numCh      = juce::jmin (numOut, static_cast<int> (delays.size()));
+
+    // Algunos hosts mandan bloques vacios (Reaper parado, renders offline).
+    // Sin esto, mas abajo se leeria driveCurve[numSamples - 1] con indice -1.
+    if (numSamples <= 0)
+        return;
+
+    // Bloque MAYOR de lo anunciado en prepareToPlay. FL Studio y algunos hosts
+    // al congelar pistas lo hacen. Antes se devolvia la senal seca sin mezclar,
+    // que con Mix al 50 % era un salto de +6 dB y un hueco en la cola. Ahora
+    // se trocea al tamano reservado y cada trozo pasa por aqui otra vez.
+    const int capacity = wetBuffer.getNumSamples();
+    if (numSamples > capacity)
+    {
+        if (capacity <= 0)
+            return;   // prepareToPlay no se ha llamado: no hay donde procesar
+
+        for (int start = 0; start < numSamples; start += capacity)
+        {
+            const int len = juce::jmin (capacity, numSamples - start);
+            juce::AudioBuffer<float> sub (buffer.getArrayOfWritePointers(),
+                                          buffer.getNumChannels(), start, len);
+            processBlock (sub, midi);
+        }
+        return;
+    }
 
     if (numIn == 1 && numOut > 1)
     {
@@ -306,8 +358,8 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             buffer.clear (ch, 0, numSamples);
     }
 
-    if (numCh <= 0 || numSamples > wetBuffer.getNumSamples())
-        return;   // bloque mayor de lo anunciado: mejor pasar que allocar aqui
+    if (numCh <= 0)
+        return;
 
     // --- tempo del host --------------------------------------------------
     if (auto* ph = getPlayHead())
@@ -389,15 +441,32 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     // Suavizado por bloque. Deliberadamente NO uso SmoothedValue aqui: las
     // rutas Pre/Post/Paralelo llaman a los motores en distinto orden, y
     // getNextValue() se adelantaria un numero distinto de veces segun la ruta.
-    revFbSm  += 0.25f * (pFeedback->load() * 0.01f - revFbSm);
-    echoFbSm += 0.25f * (pDFeed->load()    * 0.01f - echoFbSm);
+    revFbSm  = blockSmooth (revFbSm,  pFeedback->load() * 0.01f, numSamples, 0.05f);
+    echoFbSm = blockSmooth (echoFbSm, pDFeed->load()    * 0.01f, numSamples, 0.05f);
 
-    mixSmoothed.setTargetValue (pMix->load() * 0.01f);
+    // En bypass la seca sube a 1 y la humeda conserva su nivel: la cola se
+    // agota sola porque mas abajo el efecto recibe silencio en vez de entrada.
+    const float mixTarget = pMix->load() * 0.01f;
+    drySmoothed.setTargetValue (bypassed ? 1.0f : 1.0f - mixTarget);
+    wetSmoothed.setTargetValue (mixTarget);
 
-    const float revAmt = pRevAmt->load() * 0.01f;
+    // Reverb: los tres parametros suavizados, porque juce::Reverb los aplica
+    // de golpe y automatizarlos daba escalones. Y si estaba en bypass (amount
+    // a 0) y vuelve a subir, se resetea: si no, soltaba la cola rancia que
+    // tenia dentro de cuando se apago.
+    revAmtSm  = blockSmooth (revAmtSm,  pRevAmt->load()  * 0.01f, numSamples, 0.05f);
+    revSizeSm = blockSmooth (revSizeSm, pRevSize->load() * 0.01f, numSamples, 0.05f);
+    revDampSm = blockSmooth (revDampSm, pRevDamp->load() * 0.01f, numSamples, 0.05f);
+
+    const float revAmt = revAmtSm;
+    const bool  revOn  = revAmt > 0.0001f;
+    if (revOn && ! reverbActive)
+        reverb.reset();
+    reverbActive = revOn;
+
     juce::Reverb::Parameters rp;
-    rp.roomSize   = pRevSize->load() * 0.01f;
-    rp.damping    = pRevDamp->load() * 0.01f;
+    rp.roomSize   = revSizeSm;
+    rp.damping    = revDampSm;
     rp.width      = 1.0f;
     rp.freezeMode = 0.0f;
     // El wet interno de juce::Reverb se escala por 3, asi que 0.4 ya es
@@ -471,8 +540,11 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     };
 
     // --- cadena ----------------------------------------------------------
-    for (int ch = 0; ch < numCh; ++ch)
-        wetBuffer.copyFrom (ch, 0, buffer, ch, 0, numSamples);
+    if (bypassed)
+        wetBuffer.clear (0, numSamples);   // el efecto sigue corriendo, pero sin entrada
+    else
+        for (int ch = 0; ch < numCh; ++ch)
+            wetBuffer.copyFrom (ch, 0, buffer, ch, 0, numSamples);
 
     if (pRevPost->load() <= 0.5f)
         applyReverb (wetBuffer);          // reverb ANTES: la cola tambien se invierte
@@ -525,12 +597,15 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     for (int ch = 0; ch < numCh && ch < 2; ++ch)
         dryPeak[static_cast<size_t> (ch)] = buffer.getMagnitude (ch, 0, numSamples);
 
-    const float duckAmt = pDuck->load() * 0.01f;
+    // En bypass no se duckea: la cola se agota tal cual, sin que la seca la
+    // module.
+    const float duckAmt = bypassed ? 0.0f : pDuck->load() * 0.01f;
     float lastDuck = 1.0f;
 
     for (int n = 0; n < numSamples; ++n)
     {
-        const float mix = mixSmoothed.getNextValue();
+        const float dryGain = drySmoothed.getNextValue();
+        const float wetGain = wetSmoothed.getNextValue();
 
         // El ducking mira la senal SECA, que es la que toca el musico.
         float dryAbs = 0.0f;
@@ -543,8 +618,8 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         for (int ch = 0; ch < numCh; ++ch)
         {
             auto* out = buffer.getWritePointer (ch);
-            out[n] = out[n] * (1.0f - mix)
-                   + wetBuffer.getReadPointer (ch)[n] * mix * duck;
+            out[n] = out[n] * dryGain
+                   + wetBuffer.getReadPointer (ch)[n] * wetGain * duck;
         }
     }
 
@@ -612,6 +687,12 @@ void ReverseVerbProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     if (auto xml = apvts.copyState().createXml())
     {
+        // Version del formato de estado. Hoy no se usa para nada: APVTS ya
+        // rellena con el default cualquier parametro que falte. Existe para
+        // el dia que cambie el RANGO de un parametro y haya que migrar el
+        // valor guardado, porque entonces sin esto no hay forma de saber de
+        // que version viene el proyecto.
+        xml->setAttribute ("version",    kStateVersion);
         xml->setAttribute ("program",    currentProgram);
         xml->setAttribute ("presetName", presetManager.currentName);
         copyXmlToBinary (*xml, destData);
@@ -630,6 +711,10 @@ void ReverseVerbProcessor::setStateInformation (const void* data, int sizeInByte
             presetManager.currentName = xml->getStringAttribute ("presetName", "Init");
 
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
+
+            // Lo que se acaba de cargar ES el estado de referencia: no cuenta
+            // como "modificado" respecto al preset.
+            presetManager.markClean();
         }
     }
 }

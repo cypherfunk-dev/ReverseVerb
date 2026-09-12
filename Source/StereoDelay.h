@@ -6,7 +6,7 @@
 #include <vector>
 
 /**
-    Delay estereo con ping-pong, filtro y saturacion en el lazo.
+    Delay estereo con ping-pong, filtro y saturacion suave (tanh) en el lazo.
 
     TIEMPO FRACCIONARIO Y SUAVIZADO
     -------------------------------
@@ -49,7 +49,6 @@ public:
         target = current = std::clamp (initialDelaySamples, 2.0f, static_cast<float> (maxDelay));
 
         setTone (20.0f, 20000.0f);
-        setDrive (1.0f);
         reset();
     }
 
@@ -93,8 +92,6 @@ public:
         mod[0] = modL;
         mod[1] = modR;
     }
-    void setDrive (float d) noexcept   { drive = std::max (1.0f, d); }
-
     /** Procesa un par de muestras in-place. Si es mono, r se ignora. */
     void process (float& l, float& r, float feedback) noexcept
     {
@@ -120,9 +117,14 @@ public:
             float f = fb * rd[src];
             f = f - hp[c].lowpass (f);        // paso alto
             f = lp[c].lowpass (f);            // paso bajo
-            f = std::tanh (drive * f) / drive;
+            f = std::tanh (f);                // saturacion suave, ganancia max 1
 
-            buf[c][static_cast<size_t> (writePos)] = in[c] + f;
+            // Un NaN que entre una sola vez (del host, de un filtro) se
+            // quedaria dando vueltas en el lazo para siempre. Se corta aqui,
+            // en lo unico que se escribe al buffer.
+            float w = in[c] + f;
+            if (! std::isfinite (w)) w = 0.0f;
+            buf[c][static_cast<size_t> (writePos)] = w;
         }
 
         if (++writePos >= bufLen)
@@ -154,7 +156,7 @@ private:
 
     double sampleRate = 44100.0;
     int bufLen = 0, maxDelay = 0, writePos = 0, channels = 2;
-    float target = 0.0f, current = 0.0f, glide = 0.01f, drive = 1.0f;
+    float target = 0.0f, current = 0.0f, glide = 0.01f;
     float mod[2] = { 0.0f, 0.0f };
     bool pingPong = false;
 };

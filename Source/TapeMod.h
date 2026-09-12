@@ -34,6 +34,17 @@ public:
     void prepare (double sr) noexcept
     {
         sampleRate = sr;
+
+        // cents -> ratio -> muestras, dividiendo por la frecuencia del LFO.
+        // Se calcula aqui y no por muestra: son dos pow() que no cambian nunca.
+        auto depthSamples = [sr] (float cents, float hz)
+        {
+            const float ratio = std::pow (2.0f, cents / 1200.0f) - 1.0f;
+            return ratio * static_cast<float> (sr) / (6.28318530718f * hz);
+        };
+        wowDepth  = depthSamples (kWowMaxCents,  kWowHz1);
+        flutDepth = depthSamples (kFlutMaxCents, kFlutHz1);
+
         reset();
     }
 
@@ -61,15 +72,8 @@ public:
         const float f1 = advance (p3, kFlutHz1);
         const float f2 = advance (p4, kFlutHz2);
 
-        // cents -> ratio -> muestras, dividiendo por la frecuencia del LFO
-        auto depthSamples = [&] (float cents, float hz)
-        {
-            const float ratio = std::pow (2.0f, cents / 1200.0f) - 1.0f;
-            return ratio * sr / (twoPi * hz);
-        };
-
-        const float wowS  = wow     * depthSamples (kWowMaxCents,  kWowHz1);
-        const float flutS = flutter * depthSamples (kFlutMaxCents, kFlutHz1);
+        const float wowS  = wow     * wowDepth;
+        const float flutS = flutter * flutDepth;
 
         return wowS  * (0.65f * w1 + 0.35f * w2)
              + flutS * (0.60f * f1 + 0.40f * f2);
@@ -85,5 +89,6 @@ private:
     static constexpr float kFlutMaxCents = 14.0f;
 
     double sampleRate = 44100.0;
+    float wowDepth = 0.0f, flutDepth = 0.0f;   // muestras a profundidad maxima
     float p1 = 0.0f, p2 = 1.7f, p3 = 3.1f, p4 = 5.2f;
 };

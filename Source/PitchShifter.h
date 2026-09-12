@@ -76,7 +76,7 @@ public:
 
     float process (float x) noexcept
     {
-        buf[static_cast<size_t> (writePos)] = x;
+        buf[static_cast<size_t> (writePos)] = std::isfinite (x) ? x : 0.0f;
 
         // La distancia entre lectura y escritura deriva; al envolverse, la
         // ventana del grano vale exactamente 0, asi que no hay discontinuidad.

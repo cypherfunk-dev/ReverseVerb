@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <atomic>
 
 /**
     Presets de fabrica (fijos, visibles en el menu del DAW) + presets de usuario
@@ -19,10 +20,17 @@
     vuelve a su valor por defecto antes de aplicarlo. Es menos verboso y evita
     el bug de que un preset herede un parametro del preset anterior.
 */
-class PresetManager
+class PresetManager : private juce::AudioProcessorValueTreeState::Listener
 {
 public:
-    explicit PresetManager (juce::AudioProcessorValueTreeState& state) : apvts (state) {}
+    explicit PresetManager (juce::AudioProcessorValueTreeState& state);
+    ~PresetManager() override;
+
+    /** true si algun parametro cambio desde el ultimo preset cargado. La GUI
+        lo usa para pintar un asterisco junto al nombre. Atomico porque el
+        host puede automatizar desde el hilo de audio. */
+    bool isDirty() const noexcept { return dirty.load(); }
+    void markClean() noexcept      { dirty.store (false); }
 
     // --- fabrica ---
     static int           getNumFactoryPresets();
@@ -41,8 +49,11 @@ public:
 private:
     void resetToDefaults();
     void setParam (const juce::String& id, float rawValue);
+    void parameterChanged (const juce::String&, float) override;
 
     juce::AudioProcessorValueTreeState& apvts;
+    std::atomic<bool> dirty   { false };
+    std::atomic<bool> loading { false };   // ignora los cambios que provoca el propio preset
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PresetManager)
 };

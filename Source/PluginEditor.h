@@ -103,7 +103,14 @@ private:
         Va en un Timer porque el numero de canales lo decide el host y puede
         cambiar sin que el usuario toque nada en la GUI. */
     void updateEnablement();
-    void timerCallback() override { updateEnablement(); }
+
+    /** Mantiene el combo de presets en sintonia con el procesador: si el host
+        cambia de programa desde su propio menu, o se carga un proyecto, el
+        nombre tiene que actualizarse solo. Y si el usuario toca un knob tras
+        cargar un preset, se marca con un asterisco. */
+    void syncPresetDisplay();
+    int  presetIdForName (const juce::String& name) const;
+    void timerCallback() override { updateEnablement(); syncPresetDisplay(); }
 
     void refreshPresetList (int idToSelect = 0);
     void stepPreset (int delta);
@@ -136,6 +143,10 @@ private:
     // Los presets de usuario empiezan en este id para no chocar con los de
     // fabrica, que ocupan 1..N.
     static constexpr int userIdBase = 1000;
+
+    // Lo ultimo que se pinto en el combo, para no repintarlo 4 veces por segundo.
+    juce::String shownName;
+    bool         shownDirty = false;
 
     std::unique_ptr<ButtonAtt> syncAtt, dSyncAtt, pingAtt, postAtt, freezeAtt;
     std::unique_ptr<ComboAtt>  divAtt, dDivAtt, routeAtt;

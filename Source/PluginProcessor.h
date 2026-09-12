@@ -8,6 +8,7 @@
 #include "TapeMod.h"
 #include "PresetManager.h"
 #include <atomic>
+#include <limits>
 #include <vector>
 
 class ReverseVerbProcessor : public juce::AudioProcessor
@@ -23,6 +24,11 @@ public:
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
+    /** Bypass con cola: la senal seca pasa a ganancia 1 y el efecto sigue
+        sonando hasta agotarse, pero ya no le entra nada nuevo. Sin esto JUCE
+        corta la cola de golpe al pulsar bypass en el host. */
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
 
@@ -30,7 +36,12 @@ public:
     bool acceptsMidi() const override   { return false; }
     bool producesMidi() const override  { return false; }
     bool isMidiEffect() const override  { return false; }
-    double getTailLengthSeconds() const override { return 12.0; }
+    /** Con Freeze la cola es literalmente infinita; algunos hosts recortan el
+        render con este dato, asi que conviene decirselo. */
+    double getTailLengthSeconds() const override
+    {
+        return visFrozen.load() ? std::numeric_limits<double>::infinity() : 12.0;
+    }
 
     int getNumPrograms() override;
     int getCurrentProgram() override { return currentProgram; }
@@ -87,9 +98,19 @@ private:
     juce::AudioBuffer<float> wetBuffer, parBuffer;   // reservados en prepareToPlay
     std::vector<float>       driveCurve;             // drive por muestra
     std::vector<float>       modCurve;               // wow/flutter por muestra
-    juce::SmoothedValue<float> mixSmoothed;
+    // Ganancias de la mezcla final, por muestra. Van separadas porque en
+    // bypass la seca sube a 1 mientras la humeda mantiene su nivel para que la
+    // cola se agote sin saltos.
+    juce::SmoothedValue<float> drySmoothed, wetSmoothed;
 
-    float revFbSm = 0.0f, echoFbSm = 0.0f;           // suavizado por bloque
+    /** Suavizado a ritmo de bloque con constante de tiempo en SEGUNDOS, no en
+        bloques: asi el resultado no depende del tamano de bloque del host. */
+    float blockSmooth (float current, float target, int numSamples, float seconds) const noexcept;
+
+    float revFbSm = 0.0f, echoFbSm = 0.0f;           // realimentaciones
+    float revAmtSm = 0.0f, revSizeSm = 0.7f, revDampSm = 0.4f;   // reverb
+    bool  reverbActive = false;                       // para resetearlo al reactivarlo
+    bool  bypassed     = false;                       // lo pone processBlockBypassed
 
     std::atomic<float>* pLength   = nullptr;
     std::atomic<float>* pSync     = nullptr;
