@@ -1,0 +1,149 @@
+# CI de ReverseVerb.
+#
+# En cada push y PR: compila el plugin en Windows, macOS y Linux, corre la
+# suite de DSP y valida el VST3 con pluginval (nivel 8). Los binarios quedan
+# como artefactos del workflow.
+#
+# En un tag v* ademas se publica una release de GitHub con un zip por sistema.
+#
+# JUCE se descarga via FetchContent la primera vez (~500 MB). Se cachea
+# build/_deps por sistema y por version de JUCE para que las siguientes
+# ejecuciones no lo vuelvan a bajar ni a compilar juceaide.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+
+env:
+  BUILD_TYPE: Release
+  PLUGINVAL_LEVEL: 8
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            tests_exe: build/Release/ReverseVerbTests.exe
+            pluginval_zip: pluginval_Windows.zip
+            pluginval_bin: pluginval/pluginval.exe
+            cmake_extra: -A x64
+          - name: macOS
+            os: macos-latest
+            tests_exe: build/ReverseVerbTests
+            pluginval_zip: pluginval_macOS.zip
+            pluginval_bin: pluginval/pluginval.app/Contents/MacOS/pluginval
+            # Binario universal: Apple Silicon e Intel en el mismo .vst3
+            cmake_extra: -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+          - name: Linux
+            os: ubuntu-latest
+            tests_exe: build/ReverseVerbTests
+            pluginval_zip: pluginval_Linux.zip
+            pluginval_bin: pluginval/pluginval
+            cmake_extra: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # JUCE en Linux necesita los headers de ALSA, X11, freetype y OpenGL.
+      # Sin webkit ni curl: JUCE_WEB_BROWSER=0 y JUCE_USE_CURL=0 en el CMake.
+      - name: Dependencias (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libjack-jackd2-dev \
+            libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libglu1-mesa-dev mesa-common-dev \
+            xvfb
+
+      - name: Cache de JUCE
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configurar
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ${{ matrix.cmake_extra }}
+
+      - name: Compilar
+        run: >
+          cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+          --target ReverseVerb_VST3 ReverseVerb_Standalone ReverseVerbTests
+
+      - name: Suite de DSP
+        shell: bash
+        run: ${{ matrix.tests_exe }}
+
+      - name: Descargar pluginval
+        shell: bash
+        run: |
+          curl -sSL -o pv.zip \
+            "https://github.com/Tracktion/pluginval/releases/latest/download/${{ matrix.pluginval_zip }}"
+          mkdir -p pluginval
+          unzip -q -o pv.zip -d pluginval
+          rm pv.zip
+          chmod +x "${{ matrix.pluginval_bin }}" || true
+
+      # En Linux no hay servidor grafico y pluginval abre el editor: xvfb-run
+      # le da uno virtual. --validate-in-process da mensajes utiles si peta.
+      - name: pluginval
+        shell: bash
+        run: |
+          VST3="build/ReverseVerb_artefacts/${{ env.BUILD_TYPE }}/VST3/ReverseVerb.vst3"
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            xvfb-run -a "${{ matrix.pluginval_bin }}" --strictness-level ${{ env.PLUGINVAL_LEVEL }} \
+              --validate-in-process --validate "$VST3"
+          else
+            "${{ matrix.pluginval_bin }}" --strictness-level ${{ env.PLUGINVAL_LEVEL }} \
+              --validate-in-process --validate "$VST3"
+          fi
+
+      - name: Empaquetar
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp -R "build/ReverseVerb_artefacts/${{ env.BUILD_TYPE }}/VST3/ReverseVerb.vst3" dist/
+          cp -R build/ReverseVerb_artefacts/${{ env.BUILD_TYPE }}/Standalone/* dist/
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a -tzip "../ReverseVerb-${{ matrix.name }}.zip" . > /dev/null
+          else
+            zip -qry "../ReverseVerb-${{ matrix.name }}.zip" .
+          fi
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReverseVerb-${{ matrix.name }}
+          path: ReverseVerb-${{ matrix.name }}.zip
+          if-no-files-found: error
+
+  release:
+    name: Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publicar release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.zip
+          generate_release_notes: true

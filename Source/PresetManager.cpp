@@ -283,11 +283,18 @@ void PresetManager::setParam (const juce::String& id, float rawValue)
         p->setValueNotifyingHost (p->convertTo0to1 (rawValue));
 }
 
+bool PresetManager::isSessionParam (const juce::String& id)
+{
+    // Ajustes de sesion, no de sonido: un preset no los toca.
+    return id == "tempo";
+}
+
 void PresetManager::resetToDefaults()
 {
     for (auto* p : apvts.processor.getParameters())
         if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
-            rp->setValueNotifyingHost (rp->getDefaultValue());
+            if (! isSessionParam (rp->paramID))
+                rp->setValueNotifyingHost (rp->getDefaultValue());
 }
 
 void PresetManager::loadFactoryPreset (int index)
@@ -361,8 +368,21 @@ bool PresetManager::loadUserPreset (const juce::String& name)
     {
         if (xml->hasTagName (apvts.state.getType()))
         {
+            // El preset se guardo con copyState(), asi que trae el tempo de
+            // cuando se guardo. Se conserva el actual: es de la sesion.
+            auto incoming = juce::ValueTree::fromXml (*xml);
+            for (auto* p : apvts.processor.getParameters())
+                if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+                    if (isSessionParam (rp->paramID))
+                        if (auto cur = apvts.state.getChildWithProperty ("id", rp->paramID); cur.isValid())
+                        {
+                            auto dst = incoming.getChildWithProperty ("id", rp->paramID);
+                            if (dst.isValid())
+                                dst.setProperty ("value", cur.getProperty ("value"), nullptr);
+                        }
+
             loading.store (true);
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            apvts.replaceState (incoming);
             loading.store (false);
             dirty.store (false);
             currentName = name;

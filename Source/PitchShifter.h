@@ -4,6 +4,8 @@
 #include <cmath>
 #include <vector>
 
+#include "Interp.h"
+
 /**
     Pitch shifter granular de dos granos solapados al 50 %.
 
@@ -114,16 +116,13 @@ private:
         while (p <  0.0f)                          p += static_cast<float> (bufLen);
         while (p >= static_cast<float> (bufLen))   p -= static_cast<float> (bufLen);
 
-        const int   i0   = static_cast<int> (p);
-        const float frac = p - static_cast<float> (i0);
-        int i1 = i0 + 1;
-        if (i1 >= bufLen) i1 = 0;
-
-        return buf[static_cast<size_t> (i0)]
-             + frac * (buf[static_cast<size_t> (i1)] - buf[static_cast<size_t> (i0)]);
+        return readHermite (buf, bufLen, p);
     }
 
-    // Margen minimo para que la lectura nunca alcance a la escritura.
+    // Margen minimo para que la lectura nunca alcance a la escritura. Aqui la
+    // muestra de entrada se escribe ANTES de leer, asi que con Hermite (que
+    // llega hasta i+2) basta con 2: i+2 cae como mucho en writePos, que ya
+    // tiene la muestra actual.
     static constexpr float kBase = 2.0f;
 
     std::vector<float> buf;

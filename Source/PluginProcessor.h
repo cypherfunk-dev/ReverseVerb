@@ -65,6 +65,7 @@ public:
     std::atomic<float> visLengthMs { 500.0f };
     std::atomic<float> visDelayMs  { 375.0f };
     std::atomic<float> visBpm      { 0.0f };
+    std::atomic<bool>  visHostTempo { false };  // false -> manda el parametro Tempo
     std::atomic<float> visDuckGain { 1.0f };
     std::atomic<bool>  visStereo    { true };   // false -> el ping-pong no puede actuar
     std::atomic<bool>  visFrozen    { false };
@@ -146,11 +147,19 @@ private:
     std::atomic<float>* pMix      = nullptr;
     std::atomic<float>* pDuck     = nullptr;
     std::atomic<float>* pDuckRel  = nullptr;
+    std::atomic<float>* pTempo    = nullptr;
 
     float  dModPhase = 0.0f;      // LFO del chorus del delay
 
     double currentSampleRate = 44100.0;
-    double hostBpm           = 120.0;
+
+    // Tempo del host, y si lo hemos visto alguna vez. El Standalone (y algun
+    // host con el transporte parado) no da BPM: entonces manda el parametro
+    // Tempo. Es pegajoso a proposito: si un host solo informa mientras
+    // reproduce, al parar seguimos con su ultimo valor en vez de saltar al
+    // manual y cambiar la longitud de golpe.
+    double hostBpm        = 120.0;
+    bool   hostTempoValid = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ReverseVerbProcessor)
 };

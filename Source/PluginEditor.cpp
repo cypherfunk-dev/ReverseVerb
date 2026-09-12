@@ -246,7 +246,8 @@ void WormholeView::paint (juce::Graphics& g)
 
     const float bpm = proc.visBpm.load();
     if (bpm > 0.0f)
-        right << "host " << juce::String (bpm, 1) << " BPM";
+        right << (proc.visHostTempo.load() ? "host " : "manual ")
+              << juce::String (bpm, 1) << " BPM";
 
     if (right.isNotEmpty())
         g.drawText (right, r.reduced (10.0f, 5.0f), juce::Justification::topRight);
@@ -403,6 +404,17 @@ ReverseVerbEditor::ReverseVerbEditor (ReverseVerbProcessor& p)
     dDivisionBox.addItemList (ReverseVerbProcessor::divisionNames(), 1);
     routingBox  .addItemList (ReverseVerbProcessor::routingNames(),  1);
 
+    // --- tempo manual ---
+    tempoSlider.setSliderStyle (juce::Slider::LinearBar);
+    tempoSlider.setTextValueSuffix (" BPM");
+    tempoSlider.setNumDecimalPlacesToDisplay (1);
+    content.addAndMakeVisible (tempoSlider);
+    tempoLabel.setText ("Tempo", juce::dontSendNotification);
+    tempoLabel.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+    tempoLabel.setJustificationType (juce::Justification::centredRight);
+    content.addAndMakeVisible (tempoLabel);
+    tempoAtt = std::make_unique<SliderAtt> (proc.apvts, "tempo", tempoSlider);
+
     syncAtt  = std::make_unique<ButtonAtt> (proc.apvts, "sync",     syncButton);
     dSyncAtt = std::make_unique<ButtonAtt> (proc.apvts, "dsync",    dSyncButton);
     pingAtt  = std::make_unique<ButtonAtt> (proc.apvts, "pingpong", pingButton);
@@ -522,6 +534,12 @@ void ReverseVerbEditor::updateEnablement()
     const bool stereo = proc.visStereo.load();
     pingButton.setEnabled (on && stereo);
     pingButton.setButtonText (stereo ? "Ping-Pong" : "Ping-Pong (mono)");
+
+    // Con host, el BPM lo pone el; el control manual desaparece para no
+    // sugerir que se puede cambiar algo que no se puede.
+    const bool manualTempo = ! proc.visHostTempo.load();
+    tempoSlider.setVisible (manualTempo);
+    tempoLabel .setVisible (manualTempo);
 }
 
 void ReverseVerbEditor::refreshPresetList (int idToSelect)
@@ -691,6 +709,8 @@ void ReverseVerbEditor::resized()
     syncButton  .setBounds (lay::margin,       lay::ctlRevY,  70, 22);
     divisionBox .setBounds (lay::margin + 74,  lay::ctlRevY,  90, 22);
     freezeButton.setBounds (lay::margin + 178, lay::ctlRevY,  90, 22);
+    tempoLabel  .setBounds (lay::margin + 290, lay::ctlRevY,  48, 22);
+    tempoSlider .setBounds (lay::margin + 344, lay::ctlRevY, 120, 22);
 
     routingBox  .setBounds (lay::margin,       lay::ctlDlyY, 180, 22);
     dSyncButton .setBounds (lay::margin + 194, lay::ctlDlyY,  70, 22);

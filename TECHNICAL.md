@@ -121,7 +121,7 @@ compila y corre en segundos sin arrastrar el framework ni instanciar un host.
 Es lo que la hace barata de ejecutar, y una suite barata es una suite que se
 ejecuta.
 
-Comprobaciones (24): que no hay clicks en la costura de los granos, que la ventana
+Comprobaciones (25): que no hay clicks en la costura de los granos, que la ventana
 da potencia constante, que de verdad invierte (correlación cruzada contra la
 entrada invertida), que mover `Length` no produce saltos, que ambos lazos de
 realimentación decaen aunque se pida feedback al máximo, que el retardo es
@@ -130,7 +130,8 @@ vuelve, que el filtro da −3 dB en su corte, que la lectura fraccionaria a
 `rate=1` es bit a bit idéntica a la versión entera, que Freeze no deriva, que
 el clamp de modulación adelantada funciona en el caso extremo, que el ducking
 atenúa igual a −20 dBFS que a 0 dBFS, que un NaN inyectado no se queda en el
-lazo, y que nada produce NaN con entradas de 1e6 o 1e−30.
+lazo, que la interpolación cúbica es exacta en enteros y ≥5× mejor que la
+lineal entre ellos, y que nada produce NaN con entradas de 1e6 o 1e−30.
 
 **Por qué existe:** los tres peores bugs del proyecto no se detectan de oído.
 
@@ -168,6 +169,30 @@ el plugin en lista negra por un crash, recuperarlo es más molesto que este paso
 Lo que encontró en la primera pasada está en
 [Bugs encontrados](#bug-3-booleanos-que-no-se-restauraban-pluginval).
 
+### CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre en cada push y
+PR, en **Windows, macOS (binario universal arm64+x86_64) y Linux**:
+
+1. Configura y compila VST3, Standalone y tests (JUCE cacheado en
+   `build/_deps` por sistema y por hash del `CMakeLists.txt`).
+2. Corre la suite de DSP.
+3. Descarga pluginval y valida el VST3 a nivel 8 (en Linux bajo `xvfb-run`,
+   porque no hay servidor gráfico y pluginval abre el editor).
+4. Sube un zip por sistema con el `.vst3` y el Standalone como artefacto.
+
+En un tag `v*` además publica una **release** de GitHub con los tres zips.
+Para sacar una versión:
+
+```bat
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+El código no usa nada específico de Windows, pero hasta que el CI haya pasado
+en verde en los tres sistemas, las builds de macOS y Linux son "deberían
+funcionar", no "funcionan".
+
 ---
 
 ## ASIO
@@ -193,6 +218,7 @@ Source/
   PluginProcessor.{h,cpp}   APVTS, parámetros, ruteo, bus layout
   PluginEditor.{h,cpp}      GUI: visualizador polar, knobs, medidores
   PresetManager.{h,cpp}     24 presets de fábrica + presets de usuario en %APPDATA%
+  Interp.h                  Hermite de 4 puntos para lecturas fraccionarias
   ReverseDelay.h            motor de reverse (granular, 2 granos, lectura fraccionaria)
   StereoDelay.h             delay estéreo con ping-pong y modulación
   PitchShifter.h            shifter granular para el shimmer
@@ -277,16 +303,29 @@ clicks.
 
 ### Lectura fraccionaria
 
-La posición de lectura es un float con interpolación lineal:
+La posición de lectura es un float con interpolación **cúbica** (Hermite /
+Catmull-Rom de 4 puntos, en `Interp.h`, compartida por los tres motores):
 
 ```
 pos = start - phase * rate + modOffset
 ```
 
 Con `rate=1` y `modOffset=0` la posición cae en enteros exactos y el resultado
-es **bit a bit idéntico** a la versión anterior con índices enteros — hay un test
-que lo comprueba (diferencia máxima 0.000000000). La refactorización no cambia
-el sonido por defecto; solo habilita dos cosas:
+es **bit a bit idéntico** a la versión con índices enteros — hay un test que lo
+comprueba (diferencia máxima 0.000000000). Hermite en `t=0` devuelve `x0`
+exacto, así que la cúbica conserva esa transparencia. Entre muestras, en
+cambio, la lineal actuaba como un paso bajo que iba y venía con la fase
+fraccionaria; la cúbica reduce ese error unas 25× (medido en el test sobre un
+seno a 2 kHz: 0.0004 frente a 0.011). Se nota con wow, flutter, detune,
+shimmer y el chorus del delay, que es cuando se lee entre muestras.
+
+Hermite lee `i-1..i+2`. En el reverse, las 2-3 primeras muestras de cada grano
+tocan posiciones aún no escritas en este ciclo, pero ahí la ventana vale
+`sin(π/L) ≈ 0`. En `StereoDelay` la distancia mínima subió de 2 a 3 para que
+`i+2` nunca caiga en `writePos`. En `PitchShifter` la entrada se escribe antes
+de leer, así que el margen de 2 sigue bastando.
+
+La lectura fraccionaria habilita dos cosas:
 
 - **`modOffset`** → wow y flutter. Modular la posición de lectura es modular la
   afinación.
@@ -301,6 +340,22 @@ afinación `12·log2(r)` semitonos.
 La limitación honesta: el tamaño de grano está atado a `Length`, y un buen pitch
 shifting quiere granos de 30–80 ms. Con `Length` en 1500 ms el shifting suena
 muy embarrado. Por eso el shimmer tiene su propia etapa (`PitchShifter.h`).
+
+### Tempo
+
+`resolveMs` usa el BPM del host si el playhead lo ha dado **alguna vez** desde
+`prepareToPlay`; si no, el parámetro `tempo` (40–300, default 120). Es
+pegajoso a propósito: un host que solo informe mientras reproduce no debe
+hacer que la longitud salte al manual al parar.
+
+En JUCE solo el dispositivo de iOS expone un playhead, así que en el
+Standalone de Windows `getPlayHead()` es `nullptr` y antes `Sync` quedaba
+clavado a 120 sin avisar. Ahora el control Tempo solo es visible cuando no hay
+host (`visHostTempo`), y el visualizador dice "host" o "manual".
+
+`tempo` es un parámetro de **sesión**, no de sonido: `PresetManager` lo
+excluye de `resetToDefaults()` y lo conserva al cargar un preset de usuario
+(`isSessionParam`).
 
 ### Tamaño del buffer
 
@@ -734,7 +789,7 @@ Ventana equal-power sobre material correlacionado → supresión de portadora.
 Ver [BACKLOG.md](BACKLOG.md). Resumen:
 
 - Ondulación de amplitud al mover `Length` (inaudible salvo con seno puro).
-- Sin build de macOS/Linux. El código no usa nada específico de Windows, pero
-  nunca se ha compilado fuera.
+- Builds de macOS/Linux: las hace el CI, pero no se han probado de oído en
+  un DAW real fuera de Windows.
 - Anchura estéreo adicional en el reverse (desfasar granos entre canales),
   parcialmente cubierta por `Detune`.

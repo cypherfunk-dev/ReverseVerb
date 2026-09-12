@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ReverseDelay.h"   // reutiliza OnePole
+#include "Interp.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -10,8 +11,8 @@
 
     TIEMPO FRACCIONARIO Y SUAVIZADO
     -------------------------------
-    El tiempo de retardo se lee con interpolacion lineal y se suaviza con un
-    polo. Al mover el knob, el delay hace un barrido de tono estilo cinta en
+    El tiempo de retardo se lee con interpolacion cubica (Interp.h) y se
+    suaviza con un polo. Al mover el knob, el delay hace un barrido de tono estilo cinta en
     vez de un click. Es la solucion clasica al problema de cambiar el tiempo en
     caliente, y ademas suena bien, asi que no hay razon para hacer otra cosa.
 
@@ -46,7 +47,7 @@ public:
 
         // constante de tiempo ~60 ms para el glide del retardo
         glide  = 1.0f - std::exp (-1.0f / (0.060f * static_cast<float> (sampleRate)));
-        target = current = std::clamp (initialDelaySamples, 2.0f, static_cast<float> (maxDelay));
+        target = current = std::clamp (initialDelaySamples, kMinDist, static_cast<float> (maxDelay));
 
         setTone (20.0f, 20000.0f);
         reset();
@@ -67,7 +68,7 @@ public:
 
     void setDelaySamples (float s) noexcept
     {
-        target = std::clamp (s, 2.0f, static_cast<float> (maxDelay));
+        target = std::clamp (s, kMinDist, static_cast<float> (maxDelay));
     }
 
     void setTone (float hpHz, float lpHz) noexcept
@@ -101,7 +102,7 @@ public:
         for (int c = 0; c < channels; ++c)
         {
             const float dist = std::clamp (current + mod[c],
-                                           2.0f, static_cast<float> (maxDelay));
+                                           kMinDist, static_cast<float> (maxDelay));
             rd[c] = readFrac (c, dist);
         }
 
@@ -141,15 +142,15 @@ private:
         float rp = static_cast<float> (writePos) - d;
         while (rp < 0.0f) rp += static_cast<float> (bufLen);
 
-        const int   i0   = static_cast<int> (rp);
-        const float frac = rp - static_cast<float> (i0);
-        int i1 = i0 + 1;
-        if (i1 >= bufLen) i1 -= bufLen;
-
-        const auto& b = buf[static_cast<size_t> (c)];
-        return b[static_cast<size_t> (i0)]
-             + frac * (b[static_cast<size_t> (i1)] - b[static_cast<size_t> (i0)]);
+        return readHermite (buf[static_cast<size_t> (c)], bufLen, rp);
     }
+
+    // Distancia minima de lectura. Hermite lee hasta i+2, y la lectura va
+    // ANTES de la escritura de esta muestra: a distancia 3, i+2 esta a
+    // distancia 1, que es la ultima muestra escrita. Con 2 (el minimo que
+    // bastaba a la lineal) i+2 caeria en writePos, que aun tiene la muestra de
+    // hace bufLen: una discontinuidad en el punto lejano de la cubica.
+    static constexpr float kMinDist = 3.0f;
 
     std::vector<float> buf[2];
     OnePole hp[2], lp[2];

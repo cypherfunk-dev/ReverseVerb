@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "PitchShifter.h"
+#include "Interp.h"
 
 /** Filtro de un polo. Deliberadamente simple: dentro de un lazo de
     realimentacion un filtro de orden alto es facil que se vuelva inestable, y
@@ -69,7 +70,8 @@ private:
 
     LECTURA FRACCIONARIA
     --------------------
-    La posicion de lectura es un float con interpolacion lineal:
+    La posicion de lectura es un float con interpolacion cubica (Hermite, ver
+    Interp.h):
 
         pos = start - phase * rate + modOffset
 
@@ -329,14 +331,12 @@ private:
         while (p <  0.0f)                              p += static_cast<float> (bufLen);
         while (p >= static_cast<float> (bufLen))       p -= static_cast<float> (bufLen);
 
-        const int   i0   = static_cast<int> (p);
-        const float frac = p - static_cast<float> (i0);
-        int i1 = i0 + 1;
-        if (i1 >= bufLen) i1 = 0;
-
-        const float s = buffer[static_cast<size_t> (i0)]
-                      + frac * (buffer[static_cast<size_t> (i1)]
-                              - buffer[static_cast<size_t> (i0)]);
+        // Hermite necesita i+1 e i+2. En las 2-3 primeras muestras de cada
+        // grano esas posiciones quedan por delante de `start` y todavia no se
+        // han escrito en este ciclo, pero ahi la ventana vale ~0 (sin(pi/L)),
+        // asi que lo que lean no se oye. A partir de la 3a muestra todo lo que
+        // toca esta escrito.
+        const float s = readHermite (buffer, bufLen, p);
 
         const float gain = std::sin (pi * static_cast<float> (g.phase)
                                         / static_cast<float> (g.len));

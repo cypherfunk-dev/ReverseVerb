@@ -32,8 +32,13 @@ te tape.
 
 ## Instalación
 
-Por ahora no hay instalador: el plugin se compila desde el código. Solo hace
-falta hacerlo una vez.
+**Si hay una versión publicada** en
+[Releases](https://github.com/cypherfunk-dev/ReverseVerb/releases), descarga
+el zip de tu sistema, descomprímelo y salta a
+[Cargarlo en Ableton Live](#cargarlo-en-ableton-live) (apuntando a la carpeta
+donde dejaste el `.vst3`) o abre el Standalone directamente.
+
+**Si no**, se compila desde el código. Solo hace falta hacerlo una vez.
 
 **Necesitas:** Visual Studio (la edición Community gratuita vale) con el
 paquete *"Desarrollo para escritorio con C++"* marcado durante la instalación,
@@ -112,6 +117,7 @@ funcionales a propósito, para que los encuentres seis meses después.
 |---|---|
 | **Length** | Cuánto audio se invierte de cada vez (20 ms – 2 s). También es el retraso con el que oyes el efecto. Por debajo de 80 ms suena granular; a partir de 500 ms es el swell clásico. |
 | **Sync** + división | En lugar de milisegundos, fija Length a una fracción del compás siguiendo el tempo del DAW. Hay puntillos y tresillos. |
+| **Tempo** | Solo aparece cuando no hay DAW que mande el tempo (por ejemplo en el Standalone). Es el BPM que usan los dos Sync. |
 | **Feedback** | Cuántas veces se repite la cola invertida. Hay un tope de seguridad interno (ver [Trucos](#trucos-y-cosas-que-conviene-saber)). |
 | **Drive** | Saturación de la cola. Solo afecta a las repeticiones, no a la primera pasada, así que la cola se va "ensuciando" poco a poco, como en una cinta. |
 | **Drive Env** | Hace que el Drive dependa de la fuerza con que tocas. A 0 el drive es fijo. Al subirlo, tocar suave deja la cola limpia y atacar fuerte la satura. |
@@ -305,6 +311,10 @@ que reacciona al ataque, no un poco después.
 **Shimmer no es un armonizador.** Tiene un pequeño error de afinación (±20
 cents) que en un sonido shimmer no molesta porque ya es irreal por naturaleza.
 Pero no lo uses esperando un intervalo afinado.
+
+**En el Standalone el tempo lo pones tú.** Sin DAW nadie manda el BPM, así
+que aparece un control **Tempo** junto a Freeze. En cuanto cargas el plugin en
+un DAW, ese control desaparece y el visualizador muestra "host … BPM".
 
 **Wow y Flutter se especifican en "cuánto desafina", no en tiempo.** Por eso
 "Wow al 50 %" suena igual de desafinado a 44.1 kHz que a 96 kHz.

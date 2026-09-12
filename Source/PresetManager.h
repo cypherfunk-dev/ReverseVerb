@@ -47,6 +47,7 @@ public:
     juce::String currentName { "Init" };
 
 private:
+    static bool isSessionParam (const juce::String& id);
     void resetToDefaults();
     void setParam (const juce::String& id, float rawValue);
     void parameterChanged (const juce::String&, float) override;

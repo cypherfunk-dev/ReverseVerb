@@ -27,6 +27,7 @@
 #include "Ducker.h"
 #include "TapeMod.h"
 #include "PitchShifter.h"
+#include "Interp.h"
 
 #include <algorithm>
 #include <cmath>
@@ -751,6 +752,37 @@ void testDucker()
            "a -20 dBFS " + f (quietAttacked, 3) + ", con ruido a -46 dBFS " + f (noiseAttacked, 3));
 }
 
+/** La cubica tiene que ser exacta en los enteros (si no, el reverse a rate=1
+    dejaria de ser transparente) y mucho mejor que la lineal entre ellos. */
+void testHermite()
+{
+    // Seno a 0.3 rad/muestra (~2.1 kHz a 44.1k): bastante agudo para que la
+    // lineal se note.
+    const int N = 64;
+    std::vector<float> buf ((size_t) N);
+    for (int i = 0; i < N; ++i) buf[(size_t) i] = std::sin (0.3f * (float) i);
+
+    float worstInt = 0.0f, worstCubic = 0.0f, worstLinear = 0.0f;
+    for (int i = 4; i < N - 4; ++i)
+    {
+        worstInt = std::max (worstInt, std::fabs (readHermite (buf, N, (float) i) - buf[(size_t) i]));
+
+        for (int k = 1; k < 8; ++k)
+        {
+            const float p     = (float) i + (float) k / 8.0f;
+            const float ideal = std::sin (0.3f * p);
+            const float lin   = buf[(size_t) i] + ((float) k / 8.0f) * (buf[(size_t) i + 1] - buf[(size_t) i]);
+            worstCubic  = std::max (worstCubic,  std::fabs (readHermite (buf, N, p) - ideal));
+            worstLinear = std::max (worstLinear, std::fabs (lin - ideal));
+        }
+    }
+
+    check ("interpolacion cubica: exacta en enteros, mejor que lineal",
+           worstInt == 0.0f && worstCubic < worstLinear * 0.2f,
+           "error en enteros " + f (worstInt, 9) + ", cubica " + f (worstCubic, 5)
+           + " vs lineal " + f (worstLinear, 5));
+}
+
 /** Un NaN que entre UNA vez no puede quedarse a vivir en el lazo. */
 void testNaNFlush()
 {
@@ -868,6 +900,7 @@ int main (int argc, char** argv)
 
     section ("AUXILIARES");
     testDucker();
+    testHermite();
     testNaNFlush();
     testOnePole();
     testNoNaN();

@@ -135,6 +135,12 @@ private:
     juce::ToggleButton postButton  { "Reverb despues del reverse" };
     juce::ComboBox     divisionBox, dDivisionBox, routingBox;
 
+    // Tempo manual. Solo se ve cuando el host no da BPM (Standalone): con host
+    // el valor sale en el visualizador y este control sobraria.
+    juce::Slider tempoSlider;
+    juce::Label  tempoLabel;
+    std::unique_ptr<SliderAtt> tempoAtt;
+
     juce::ComboBox   presetBox;
     juce::TextButton prevBtn { "<" }, nextBtn { ">" },
                      saveBtn { "Guardar" }, delBtn { "Borrar" };

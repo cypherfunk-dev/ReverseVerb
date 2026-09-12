@@ -157,6 +157,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout ReverseVerbProcessor::create
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "duckrel", 1 }, "Duck Rel",
         NormalisableRange<float> (20.0f, 1000.0f, 1.0f, 0.5f), 250.0f, lab ("ms")));
 
+    // --- TEMPO ---
+    // Solo actua cuando el host no da BPM (Standalone). Va al final del
+    // layout por la misma regla que los presets: los estados guardados no
+    // dependen del orden, pero los indices de automatizacion de algun host si.
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "tempo", 1 }, "Tempo",
+        NormalisableRange<float> (40.0f, 300.0f, 0.1f), 120.0f, lab ("BPM")));
+
     return l;
 }
 
@@ -185,6 +192,7 @@ ReverseVerbProcessor::ReverseVerbProcessor()
     pRevDamp = get ("revdamp");  pRevPost = get ("revpost");
 
     pMix     = get ("mix");      pDuck    = get ("duck");    pDuckRel = get ("duckrel");
+    pTempo   = get ("tempo");
 }
 
 juce::AudioProcessorEditor* ReverseVerbProcessor::createEditor()
@@ -201,7 +209,8 @@ float ReverseVerbProcessor::resolveMs (std::atomic<float>* msParam,
         return msParam->load();
 
     const int idx = juce::jlimit (0, 9, static_cast<int> (divParam->load()));
-    const double quarterMs = 60000.0 / juce::jmax (20.0, hostBpm);
+    const double bpm = hostTempoValid ? hostBpm : static_cast<double> (pTempo->load());
+    const double quarterMs = 60000.0 / juce::jmax (20.0, bpm);
 
     return juce::jlimit (kMinMs, kMaxMs,
                          static_cast<float> (quarterMs * kDivMul[idx]));
@@ -211,6 +220,7 @@ float ReverseVerbProcessor::resolveMs (std::atomic<float>* msParam,
 void ReverseVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate;
+    hostTempoValid    = false;   // se vuelve a averiguar en el primer bloque
 
     // Se reserva SIEMPRE para el maximo, no para el valor actual. Asi mover un
     // slider nunca provoca una allocacion en el audio thread.
@@ -365,13 +375,17 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     if (auto* ph = getPlayHead())
         if (auto pos = ph->getPosition())
             if (auto bpm = pos->getBpm())
-                hostBpm = *bpm;
+            {
+                hostBpm        = *bpm;
+                hostTempoValid = true;
+            }
 
     const float revMs   = resolveMs (pLength, pSync,  pDivision);
     const float delayMs = resolveMs (pDTime,  pDSync, pDDiv);
     visLengthMs.store (revMs);
     visDelayMs.store (delayMs);
-    visBpm.store (static_cast<float> (hostBpm));
+    visBpm.store (static_cast<float> (hostTempoValid ? hostBpm : static_cast<double> (pTempo->load())));
+    visHostTempo.store (hostTempoValid);
 
     // --- ajustes de bloque -----------------------------------------------
     const int revSamples = juce::jlimit (2, static_cast<int> (kMaxMs * 0.001 * currentSampleRate),
