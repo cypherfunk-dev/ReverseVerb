@@ -3,6 +3,8 @@
 Reverse delay en tiempo real con sync a tempo, delay ping-pong ruteable,
 filtro y saturación en ambos lazos, reverb conmutable y ducking por la entrada.
 
+![Imagen del VST](assets/1.png)
+
 ## Build (Windows, Visual Studio)
 
 Necesitas Visual Studio con "Desarrollo para escritorio con C++" (trae compilador
