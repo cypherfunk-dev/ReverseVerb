@@ -265,6 +265,12 @@ Los 25 cargan y son idempotentes (test). Lo que falta es oírlos con la placa.
 
 ## 7. Interfaz
 
+- [ ] **Idioma:** con Windows en español todo sale en español (botones,
+  cabeceras, menús de clic derecho, diálogos de guardar/borrar, tira de
+  resumen). Con `REVERSEVERB_LANG=en` en el entorno antes de abrir el DAW o
+  el Standalone, todo en inglés. Los nombres de controles y de presets no
+  cambian en ningún caso. Busca alguna cadena que se haya quedado en un
+  idioma cuando el otro está activo: es un `TRANS()` que falta.
 - [ ] **Modos Simple / Completo:** abre en Simple la primera vez. Conmuta
   varias veces con audio sonando: sin cortes, sin click, el sonido no cambia.
   La ventana cambia de alto y cabe en la pantalla en los dos modos. Cierra y

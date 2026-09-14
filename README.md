@@ -1,52 +1,59 @@
-# ReverseVerb
+![ReverseVerb](assets/logo.png)
 
-**Reverse delay + delay + reverb de placa para guitarra y cualquier otra fuente.**
-Plugin VST3 para Windows, con versión Standalone para probarlo sin DAW.
+*English · [Español](README-es.md)*
 
-![Modo Simple](assets/1.png)
+**Reverse delay + delay + plate reverb for guitar and anything else.**
+VST3 plugin for Windows, with a Standalone build so you can try it without a
+DAW.
 
-Tocas una nota y, un instante después, la oyes crecer al revés: de la nada
-hasta el ataque. Ese *swell* invertido es la base. Encima puedes ponerle un
-delay rítmico, un reverb de placa con shimmer, textura de cinta (wow, flutter,
-desafinado), octavas apiladas y un ducking que aparta la cola mientras estás
-tocando para que no te tape.
+![Simple mode](assets/1.png)
 
-> Si vienes a **desarrollar** el plugin (compilar a fondo, tests, cómo funciona
-> el DSP por dentro), todo eso está en [TECHNICAL.md](TECHNICAL.md). Este
-> archivo es para **usarlo**.
+You play a note and, a moment later, you hear it grow backwards: from nothing
+up to the attack. That reversed *swell* is the core. On top of it you can add
+a rhythmic delay, a plate reverb with shimmer, tape texture (wow, flutter,
+detune), stacked octaves, and a ducker that moves the tail out of the way
+while you're playing so it never buries you.
+
+> If you're here to **develop** the plugin (full build details, tests, how the
+> DSP works inside), all of that lives in [TECHNICAL.md](TECHNICAL.md). This
+> file is about **using** it.
 
 ---
 
-## Índice
+## Contents
 
-1. [Instalación](#instalación)
-2. [Los primeros cinco minutos](#los-primeros-cinco-minutos)
-3. [Los controles](#los-controles)
+1. [Installation](#installation)
+2. [The first five minutes](#the-first-five-minutes)
+3. [The controls](#the-controls)
 4. [Presets](#presets)
-5. [Dónde ponerlo en tu cadena](#dónde-ponerlo-en-tu-cadena)
-6. [La pantalla](#la-pantalla)
-7. [Control por MIDI](#control-por-midi)
-8. [Trucos y cosas que conviene saber](#trucos-y-cosas-que-conviene-saber)
-9. [Problemas frecuentes](#problemas-frecuentes)
+5. [Where it goes in your chain](#where-it-goes-in-your-chain)
+6. [The display](#the-display)
+7. [MIDI control](#midi-control)
+8. [Tips and things worth knowing](#tips-and-things-worth-knowing)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Instalación
+## Installation
 
-**Si hay una versión publicada** en
-[Releases](https://github.com/cypherfunk-dev/ReverseVerb/releases), descarga
-el zip de tu sistema, descomprímelo y salta a
-[Cargarlo en Ableton Live](#cargarlo-en-ableton-live) (apuntando a la carpeta
-donde dejaste el `.vst3`) o abre el Standalone directamente.
+**The interface speaks your language:** the plugin shows up in Spanish if your
+system is set to Spanish, and in English otherwise. Control names (Length,
+Feedback, Drive…) are the same in both.
 
-**Si no**, se compila desde el código. Solo hace falta hacerlo una vez.
+**If there's a published version** under
+[Releases](https://github.com/cypherfunk-dev/ReverseVerb/releases), download
+the zip for your system, unzip it and skip to
+[Loading it in Ableton Live](#loading-it-in-ableton-live) (pointing at the
+folder where you put the `.vst3`), or open the Standalone directly.
 
-**Necesitas:** Visual Studio (la edición Community gratuita vale) con el
-paquete *"Desarrollo para escritorio con C++"* marcado durante la instalación,
-y Git.
+**Otherwise**, build it from source. You only need to do this once.
 
-1. Abre el **Developer Command Prompt for VS** (búscalo en el menú Inicio).
-2. Descarga el proyecto y compílalo:
+**You need:** Visual Studio (the free Community edition is fine) with the
+*"Desktop development with C++"* workload selected during install, and Git.
+
+1. Open the **Developer Command Prompt for VS** (search for it in the Start
+   menu).
+2. Download the project and build it:
 
 ```bat
 git clone https://github.com/cypherfunk-dev/ReverseVerb.git
@@ -55,396 +62,398 @@ cmake -B build
 cmake --build build --config Release
 ```
 
-La primera vez tarda varios minutos porque descarga JUCE (unos 500 MB). Las
-siguientes son rápidas.
+The first time takes several minutes because it downloads JUCE (about
+500 MB). Later builds are fast.
 
-Cuando termine tendrás dos cosas:
+When it finishes you'll have two things:
 
-| Qué | Dónde |
+| What | Where |
 |---|---|
-| El plugin **VST3** | `build\ReverseVerb_artefacts\Release\VST3\ReverseVerb.vst3` |
-| La versión **Standalone** (sin DAW) | `build\ReverseVerb_artefacts\Release\Standalone\ReverseVerb.exe` |
+| The **VST3** plugin | `build\ReverseVerb_artefacts\Release\VST3\ReverseVerb.vst3` |
+| The **Standalone** build (no DAW) | `build\ReverseVerb_artefacts\Release\Standalone\ReverseVerb.exe` |
 
-### Probarlo sin DAW
+### Trying it without a DAW
 
-Abre el `ReverseVerb.exe` de arriba, ve a **Options → Audio Settings**, elige tu
-interfaz de audio, y ya suena. Es la forma más rápida de probar el efecto y de
-trastear con los presets.
+Open the `ReverseVerb.exe` above, go to **Options → Audio Settings**, pick your
+audio interface, and it plays. It's the fastest way to try the effect and mess
+with the presets.
 
-### Cargarlo en Ableton Live
+### Loading it in Ableton Live
 
-El plugin **no se copia solo** a la carpeta del sistema; en su lugar le dices a
-Ableton que lo lea desde donde se ha compilado:
+The plugin **doesn't copy itself** to the system folder; instead you tell
+Ableton to read it from where it was built:
 
-1. **Preferencias** (`Ctrl+,`) → pestaña **Plug-Ins**.
-2. Activa **"Carpeta personalizada de plug-ins VST3"**.
-3. **Examinar** → elige la carpeta
+1. **Preferences** (`Ctrl+,`) → **Plug-Ins** tab.
+2. Enable **"Use VST3 Plug-In Custom Folder"**.
+3. **Browse** → pick the folder
    `...\ReverseVerb\build\ReverseVerb_artefacts\Release\VST3`
-   (la **carpeta**, no el archivo `.vst3`).
-4. Pulsa **Volver a examinar**.
+   (the **folder**, not the `.vst3` file).
+4. Press **Rescan**.
 
-En otros DAW el proceso es el mismo: añade esa carpeta a las rutas de VST3 y
-reescanea.
+In other DAWs it's the same: add that folder to the VST3 paths and rescan.
 
-Si prefieres tenerlo en la carpeta estándar, copia `ReverseVerb.vst3` a
-`C:\Program Files\Common Files\VST3` (te pedirá permisos de administrador).
-
----
-
-## Los primeros cinco minutos
-
-El plugin abre en **modo Simple**: ocho controles grandes, los que definen el
-sonido. Todo lo demás está en **Completo** (el conmutador de arriba, junto al
-preset). Cambiar de modo no toca el sonido: lo que no ves sigue actuando, y
-las líneas de abajo te dicen qué hay ("Tape · Wow 18 · Detune 6 c"). Un
-clic en ellas te lleva a Completo. El modo se recuerda entre sesiones.
-
-1. Carga el plugin en una pista con guitarra (o lo que sea).
-2. Elige el preset **Swell clásico** en el desplegable de arriba.
-3. Toca una nota suelta y déjala sonar. Oirás cómo aparece invertida un momento
-   después.
-4. Gira **Length**: es el tamaño del "trozo" que se invierte. Corto (100 ms)
-   suena granular y nervioso; largo (1 s o más) es el swell ambiental.
-5. Sube **Mix** para oír más efecto y menos guitarra directa.
-6. Si al tocar frases rápidas la cola te tapa, sube **Duck**: el efecto se
-   aparta mientras tocas y crece en los silencios.
-
-Con eso ya tienes el 80 % del plugin. El resto son colores.
+If you'd rather have it in the standard folder, copy `ReverseVerb.vst3` to
+`C:\Program Files\Common Files\VST3` (it will ask for admin rights).
 
 ---
 
-## Los controles
+## The first five minutes
 
-En **Simple** ves ocho: `Length`, `Feedback`, `Drive`, `Mix`, `Reverb`,
-`Size`, `Shimmer` (el del reverb) y `Duck`, más Sync, Freeze y el ruteo del
-delay. En **Completo** la pantalla está dividida en cinco bloques con todo.
-Los nombres de los controles son funcionales a propósito, para que los
-encuentres seis meses después.
+The plugin opens in **Simple mode**: eight large controls, the ones that
+define the sound. Everything else is in **Full** (the switch at the top, next
+to the preset). Switching modes doesn't touch the sound: what you don't see
+keeps working, and the lines at the bottom tell you what's there ("Tape · Wow
+18 · Detune 6 c"). Clicking them takes you to Full. The mode is remembered
+between sessions.
 
-![Modo Completo](assets/2.png)
+1. Load the plugin on a guitar track (or whatever).
+2. Pick the **Swell clasico** preset from the dropdown at the top.
+3. Play a single note and let it ring. You'll hear it reappear reversed a
+   moment later.
+4. Turn **Length**: it's the size of the "chunk" that gets reversed. Short
+   (100 ms) sounds granular and nervous; long (1 s or more) is the ambient
+   swell.
+5. Raise **Mix** to hear more effect and less direct guitar.
+6. If the tail buries you on fast phrases, raise **Duck**: the effect steps
+   aside while you play and grows in the gaps.
 
-### REVERSE — el motor principal
+That's 80 % of the plugin. The rest is colour.
 
-| Control | Qué hace |
+---
+
+## The controls
+
+In **Simple** you see eight: `Length`, `Feedback`, `Drive`, `Mix`, `Reverb`,
+`Size`, `Shimmer` (the reverb's) and `Duck`, plus Sync, Freeze and the delay
+routing. In **Full** the window is split into five blocks with everything.
+Control names are deliberately functional, so you can find them six months
+from now.
+
+![Full mode](assets/2.png)
+
+### REVERSE — the main engine
+
+| Control | What it does |
 |---|---|
-| **Length** | Cuánto audio se invierte de cada vez (20 ms – 2 s). También es el retraso con el que oyes el efecto. Por debajo de 80 ms suena granular; a partir de 500 ms es el swell clásico. |
-| **Sync** + división | En lugar de milisegundos, fija Length a una fracción del compás siguiendo el tempo del DAW. Hay puntillos y tresillos. |
-| **Tempo** | Solo aparece cuando no hay DAW que mande el tempo (por ejemplo en el Standalone). Es el BPM que usan los dos Sync. |
-| **Feedback** | Cuántas veces se repite la cola invertida. Hay un tope de seguridad interno (ver [Trucos](#trucos-y-cosas-que-conviene-saber)). |
-| **Drive** | Saturación de la cola. Solo afecta a las repeticiones, no a la primera pasada, así que la cola se va "ensuciando" poco a poco, como en una cinta. |
-| **Drive Env** | Hace que el Drive dependa de la fuerza con que tocas. A 0 el drive es fijo. Al subirlo, tocar suave deja la cola limpia y atacar fuerte la satura. |
-| **Low Cut / High Cut** | Filtros dentro de la cola. El Low Cut es especialmente útil: quita graves que se acumulan repetición tras repetición. |
-| **LC 12 dB** | Hace el Low Cut el doble de empinado. Para muros densos donde con el corte normal los graves siguen embarrando. |
-| **Freeze** | Congela lo que hay ahora mismo en el buffer y lo sostiene indefinidamente. Puedes seguir tocando encima sin que lo nuevo entre al congelado. Mientras está activo, Length y Feedback se desactivan. |
-| **Frz Rel** | Cuánto tarda en apagarse el colchón al soltar Freeze (0–2 s). A 0 desaparece en una ventana; a 400 ms (por defecto) se va con naturalidad; a 2 s queda como una cola. |
+| **Length** | How much audio gets reversed at a time (20 ms – 2 s). It's also the delay before you hear the effect. Below 80 ms it sounds granular; from 500 ms up it's the classic swell. |
+| **Sync** + division | Instead of milliseconds, locks Length to a fraction of the bar following the DAW tempo. Dotted and triplet values included. |
+| **Tempo** | Only shows when there's no DAW providing the tempo (e.g. in the Standalone). It's the BPM both Syncs use. |
+| **Feedback** | How many times the reversed tail repeats. There's an internal safety ceiling (see [Tips](#tips-and-things-worth-knowing)). |
+| **Drive** | Saturation of the tail. It only affects the repeats, not the first pass, so the tail gets "dirtier" little by little, like tape. |
+| **Drive Env** | Makes Drive follow how hard you play. At 0 the drive is fixed. As you raise it, playing softly leaves the tail clean and digging in saturates it. |
+| **Low Cut / High Cut** | Filters inside the tail. Low Cut is especially useful: it removes lows that pile up repeat after repeat. |
+| **LC 12 dB** | Makes the Low Cut twice as steep. For dense walls where the regular cut still leaves mud. |
+| **Freeze** | Freezes whatever is in the buffer right now and holds it indefinitely. You can keep playing on top without new audio entering the frozen part. While it's on, Length and Feedback are disabled. |
+| **Frz Rel** | How long the pad takes to fade out when you release Freeze (0–2 s). At 0 it vanishes within one window; at 400 ms (default) it fades naturally; at 2 s it lingers like a tail. |
 
-### DELAY — un delay estéreo normal, con su propio sitio en la cadena
+### DELAY — a regular stereo delay, with its own place in the chain
 
-| Control | Qué hace |
+| Control | What it does |
 |---|---|
-| **Ruteo** | Dónde va el delay respecto al reverse. Ver tabla abajo. |
-| **Time / Sync / división** | Tiempo del delay, en ms o sincronizado al tempo. |
-| **Feedback** | Repeticiones del delay. |
-| **Low Cut / High Cut** | Filtros propios del delay. |
-| **Ping-Pong** | Las repeticiones alternan izquierda y derecha. Solo funciona en pistas estéreo (en mono el botón se apaga). |
-| **Mod / Rate** | Chorus suave en las repeticiones. Abre la imagen estéreo. |
-| **Rev/Dly** | Solo en ruteo **Paralelo**: balance entre la rama del reverse y la del delay. En el centro suenan las dos a igual nivel. |
+| **Routing** | Where the delay sits relative to the reverse. See the table below. |
+| **Time / Sync / division** | Delay time, in ms or synced to tempo. |
+| **Feedback** | Delay repeats. |
+| **Low Cut / High Cut** | The delay's own filters. |
+| **Ping-Pong** | Repeats alternate left and right. Only works on stereo tracks (on mono the button is disabled). |
+| **Mod / Rate** | Gentle chorus on the repeats. Opens up the stereo image. |
+| **Rev/Dly** | Only in **Parallel** routing: balance between the reverse branch and the delay branch. In the centre both sound at equal level. |
 
-| Ruteo | Cómo suena |
+| Routing | How it sounds |
 |---|---|
-| **Off** | Delay desactivado. |
-| **Delay → Rev** | Primero los ecos rítmicos, y cada eco se invierte. |
-| **Rev → Delay** | El swell invertido completo se repite rítmicamente. El más "usable" de los tres. |
-| **Paralelo** | Las dos cosas a la vez, sumadas. |
+| **Off** | Delay disabled. |
+| **Delay → Rev** | Rhythmic echoes first, then each echo is reversed. |
+| **Rev → Delay** | The whole reversed swell repeats rhythmically. The most "usable" of the three. |
+| **Parallel** | Both at once, summed. |
 
-### TAPE — que suene a cinta
+### TAPE — make it sound like tape
 
-| Control | Qué hace |
+| Control | What it does |
 |---|---|
-| **Wow** | Deriva lenta de afinación. Es lo que hace que parezca un casete gastado. |
-| **Flutter** | Temblor rápido de afinación. Más sutil; quita la sensación de "digital perfecto". |
-| **Detune** | Desafina el canal izquierdo y el derecho en sentidos opuestos. Ensancha la imagen y da esa sensación mareadora de pared de sonido. |
-| **Shimmer** | Parte de la cola *invertida* pasa por un cambio de octava en cada repetición, así que se van apilando octavas sobre el swell. (El reverb tiene su propio Shimmer, ver SPACE.) |
-| **Shim Pitch** | Cuántos semitonos sube (o baja) el shimmer, de −12 a +12. Lo comparten los dos shimmers. |
+| **Wow** | Slow pitch drift. What makes it sound like a worn cassette. |
+| **Flutter** | Fast pitch wobble. Subtler; removes the "perfect digital" feel. |
+| **Detune** | Detunes left and right in opposite directions. Widens the image and gives that dizzying wall-of-sound feel. |
+| **Shimmer** | Part of the *reversed* tail goes through an octave shift on every repeat, so octaves stack up on the swell. (The reverb has its own Shimmer, see SPACE.) |
+| **Shim Pitch** | How many semitones the shimmer goes up (or down), −12 to +12. Shared by both shimmers. |
 
-### SPACE — el reverb de placa
+### SPACE — the plate reverb
 
-| Control | Qué hace |
+| Control | What it does |
 |---|---|
-| **Reverb / Size / Damp** | Cantidad, duración de la cola y oscuridad. A 0 el reverb está apagado y no consume nada. Size al máximo da colas de ~17 s. |
-| **Pre-Delay** | Silencio entre la nota y el arranque del reverb (0–200 ms). Separa la nota de su cola; útil para que un swell largo no la empaste. |
-| **Mod** | Movimiento interno de la placa. Es lo que hace que una cola larga suene lisa en vez de metálica. Al 20 % (por defecto) no se oye como chorus; más arriba sí. |
-| **Shimmer** | Octavas *dentro* del reverb: cada vuelta de la cola sube (o baja) los semitonos de Shim Pitch. Es el shimmer clásico de pedal. Al 30–50 % se apilan varias octavas a la vez; al 100 % todo sube y la cola se vuelve aire. |
-| **Reverb Post** | **Encendido**: el reverb va después del reverse; es el swell clásico que crece hacia la nota. **Apagado**: el reverb entra al buffer y se invierte con él; da un carácter de "succión" más raro. |
+| **Reverb / Size / Damp** | Amount, tail length and darkness. At 0 the reverb is off and costs nothing. Size at max gives tails around 17 s. |
+| **Pre-Delay** | Silence between the note and the start of the reverb (0–200 ms). Separates the note from its tail; useful so a long swell doesn't smear it. |
+| **Mod** | Internal movement of the plate. What makes a long tail sound smooth instead of metallic. At 20 % (default) it doesn't read as chorus; higher up it does. |
+| **Shimmer** | Octaves *inside* the reverb: every pass of the tail goes up (or down) by Shim Pitch semitones. The classic pedal shimmer. At 30–50 % several octaves stack at once; at 100 % everything rises and the tail turns to air. |
+| **Reverb Post** | **On**: the reverb comes after the reverse; the classic swell that grows into the note. **Off**: the reverb goes into the buffer and gets reversed with it; a stranger "suction" character. |
 
-Hay **dos shimmers** y suenan distinto: el de TAPE apila octavas sobre el
-swell invertido (cada repetición del reverse sube); el de SPACE las apila
-sobre la cola del reverb. Se pueden usar a la vez.
+There are **two shimmers** and they sound different: TAPE's stacks octaves on
+the reversed swell (every reverse repeat goes up); SPACE's stacks them on the
+reverb tail. You can use both at once.
 
 ### OUTPUT
 
-| Control | Qué hace |
+| Control | What it does |
 |---|---|
-| **Mix** | Balance entre señal directa y efecto. |
-| **Duck** | Baja el efecto mientras hay señal de entrada. Es lo que hace usable un reverse reverb en una mezcla densa: la cola crece en los huecos en vez de tapar la nota que la provoca. Se adapta al nivel de tu señal, así que no depende de la ganancia de entrada. |
-| **Duck Rel** | Con qué rapidez vuelve el efecto al dejar de tocar. Ajústalo al ritmo de la frase. |
-| **Output** | Volumen de salida en dB (−24 a +12). Para bajar el nivel sin tocar el Mix cuando el feedback y el shimmer se te van. En bypass no actúa. |
+| **Mix** | Balance between direct signal and effect. |
+| **Duck** | Turns the effect down while there's input. It's what makes a reverse reverb usable in a dense mix: the tail grows in the gaps instead of covering the note that caused it. It adapts to your signal level, so it doesn't depend on input gain. |
+| **Duck Rel** | How fast the effect comes back when you stop playing. Set it to the pace of the phrase. |
+| **Output** | Output level in dB (−24 to +12). To bring the level down without touching Mix when feedback and shimmer run away. Does nothing in bypass. |
 
 ---
 
 ## Presets
 
-Vienen **25 de fábrica**, agrupados por intención. Aparecen tanto en el
-desplegable del plugin como en el menú de presets de tu DAW.
+There are **25 factory presets**, grouped by intent. They show up both in the
+plugin's dropdown and in your DAW's preset menu. Preset names are in Spanish
+in both languages: they're names, like song titles.
 
-| Grupo | Presets |
+| Group | Presets |
 |---|---|
-| Swells ambientales | Swell clásico · Nube lenta · Respiración |
-| Rítmicos (sincronizados) | Swell al pulso · Tresillos invertidos · Corcheas cruzadas |
-| Granulares | Granular metálico · Textura de vidrio · Motor roto |
-| Sutiles, para mezcla | Profundidad discreta · Cola de voz |
-| Referencias | Ref: Guthrie Wash · Ref: Bow & Swell · Ref: Greenwood Reverse · Ref: Dotted Edge |
+| Ambient swells | Swell clasico · Nube lenta · Respiracion |
+| Rhythmic (synced) | Swell al pulso · Tresillos invertidos · Corcheas cruzadas |
+| Granular | Granular metalico · Textura de vidrio · Motor roto |
+| Subtle, for mixing | Profundidad discreta · Cola de voz |
+| References | Ref: Guthrie Wash · Ref: Bow & Swell · Ref: Greenwood Reverse · Ref: Dotted Edge |
 | Shoegaze | Shoe: Muro · Shoe: Souvlaki · Shoe: Nowhere |
-| Tape, shimmer y drive dinámico | Catedral (shimmer) · Octavas al pulso · Subterráneo · Cinta muerta · Dinámico (toca fuerte) · Drone (pulsa Freeze) |
-| Placa | Placa de cristal (shimmer dentro del reverb; el reverse es condimento) |
+| Tape, shimmer and dynamic drive | Catedral (shimmer) · Octavas al pulso · Subterraneo · Cinta muerta · Dinamico (toca fuerte) · Drone (pulsa Freeze) |
+| Plate | Placa de cristal (shimmer inside the reverb; the reverse is seasoning) |
 
-Uno merece explicación: **Drone (pulsa Freeze)** no suena distinto de entrada.
-Está *preparado* para congelar: ventana larga, shimmer moderado, reverb grande.
-Tocas un acorde, pulsas Freeze, y sigues tocando encima del colchón.
+One deserves a note: **Drone (pulsa Freeze)** ("Drone (press Freeze)")
+doesn't sound different at first. It's *set up* to be frozen: long window,
+moderate shimmer, big reverb. Play a chord, press Freeze, keep playing over
+the pad.
 
-### Los "Ref:"
+### The "Ref:" presets
 
-Son puntos de partida inspirados en el **papel** que un reverse o un delay juega
-en esos discos, no emulaciones. El sonido de una banda sale del instrumento, el
-ampli, la sala y la mezcla; esto es un eslabón.
+They're starting points inspired by the **role** a reverse or a delay plays on
+those records, not emulations. A band's sound comes from the instrument, the
+amp, the room and the mix; this is one link.
 
-| Preset | De dónde sale la idea |
+| Preset | Where the idea comes from |
 |---|---|
-| **Ref: Guthrie Wash** | Cocteau Twins, Slowdive. Guitarra lavada hasta perder el ataque: ventana larga, reverb generoso, graves recortados, ping-pong para abrir la imagen. |
-| **Ref: Bow & Swell** | Sigur Rós y post-rock en general. Ventana de 1.6 s, reverb enorme, ducking alto para que la nota respire antes de que llegue la cola. |
-| **Ref: Greenwood Reverse** | Radiohead. Más corto, sincronizado y con saturación. Es el único de fábrica con **Reverb Post apagado**: de ahí sale ese carácter incómodo de succión. |
-| **Ref: Dotted Edge** | U2. Aquí manda la sección DELAY con corchea con puntillo; el reverse queda en 120 ms como condimento. |
+| **Ref: Guthrie Wash** | Cocteau Twins, Slowdive. Guitar washed until the attack is gone: long window, generous reverb, lows trimmed, ping-pong to open the image. |
+| **Ref: Bow & Swell** | Sigur Rós and post-rock in general. 1.6 s window, huge reverb, heavy ducking so the note breathes before the tail arrives. |
+| **Ref: Greenwood Reverse** | Radiohead. Shorter, synced, with saturation. The only factory preset with **Reverb Post off**: that's where the uneasy suction character comes from. |
+| **Ref: Dotted Edge** | U2. Here the DELAY section leads with a dotted eighth; the reverse stays at 120 ms as seasoning. |
 
-### Los "Shoe:"
+### The "Shoe:" presets
 
 | Preset | Idea |
 |---|---|
-| **Shoe: Muro** | El muro de sonido. Mix al 72 %, las dos ramas en paralelo, drive alto. El efecto pesa más que la señal directa, que es el punto. |
-| **Shoe: Souvlaki** | Slowdive: vidrioso y largo. Ventana de 1.1 s, reverb al 82 %, poco damping para que brille. |
-| **Shoe: Nowhere** | Ride: más empuje. Sincronizado a corcheas con el delay en semicorcheas. |
+| **Shoe: Muro** | The wall of sound. Mix at 72 %, both branches in parallel, high drive. The effect outweighs the direct signal, which is the point. |
+| **Shoe: Souvlaki** | Slowdive: glassy and long. 1.1 s window, reverb at 82 %, low damping so it shines. |
+| **Shoe: Nowhere** | Ride: more push. Synced to eighths with the delay on sixteenths. |
 
-Dos cosas van **al revés** que en el resto, y es a propósito:
+Two things go **the other way** from the rest, on purpose:
 
-- **El Duck va bajo** (10–25 %). En shoegaze el desenfoque *es* la estética; un
-  ducking alto te dejaría un efecto pulcro, justo lo contrario.
-- **El Low Cut va alto** (150–250 Hz). Con el Mix por encima del 60 %, los
-  graves se acumulan y el muro se vuelve barro. Es el control que separa
-  "denso" de "sucio".
+- **Duck is low** (10–25 %). In shoegaze the blur *is* the aesthetic; heavy
+  ducking would leave you with a tidy effect, the exact opposite.
+- **Low Cut is high** (150–250 Hz). With Mix above 60 % the lows pile up and
+  the wall turns to mud. It's the control that separates "dense" from
+  "dirty".
 
-Aviso honesto: el sonido shoegaze sale sobre todo de reverb, modulación y
-distorsión. El *glide* de My Bloody Valentine es la palanca de trémolo, que
-este plugin no hace. Estos presets aportan la parte de cola invertida, que en
-Cocteau Twins y Slowdive sí es un ingrediente real.
+Honest disclaimer: the shoegaze sound comes mostly from reverb, modulation and
+distortion. My Bloody Valentine's *glide* is the tremolo arm, which this
+plugin doesn't do. These presets provide the reversed-tail part, which in
+Cocteau Twins and Slowdive is a real ingredient.
 
-### Tus propios presets
+### Your own presets
 
-Se guardan con el botón **Guardar** y viven en:
+Saved with the **Save** button, they live in:
 
 ```
 %APPDATA%\ReverseVerb\Presets\
 ```
 
-Sobreviven a reinstalar el plugin y los puedes copiar a otro ordenador. Solo se
-pueden borrar los tuyos; los de fábrica no.
+They survive reinstalling the plugin and you can copy them to another
+computer. Only yours can be deleted; factory presets can't.
 
 ---
 
-## Dónde ponerlo en tu cadena
+## Where it goes in your chain
 
-ReverseVerb es **un eslabón**, no una cadena. Con un ampli virtual (NAM y
-similares), compresor y EQ, el orden que tiene sentido es:
+ReverseVerb is **one link**, not a chain. With an amp sim (NAM and the like),
+compressor and EQ, the order that makes sense is:
 
 ```
-Guitarra --> Ampli / NAM --> Compresor --> EQ --> ReverseVerb
+Guitar --> Amp / NAM --> Compressor --> EQ --> ReverseVerb
 ```
 
-- **Después del ampli**: quieres que el swell sea de *tu tono*, no que el
-  ampli tenga que lidiar con una cola que crece al revés.
-- **Después del compresor**: un compresor detrás bombearía contra los swells y
-  desharía el ducking.
-- **El EQ delante**, si arrastras graves sucios. Aunque el Low Cut de la cola ya
-  ayuda bastante.
+- **After the amp**: you want the swell to be *your tone*, not the amp
+  dealing with a tail that grows backwards.
+- **After the compressor**: a compressor behind it would pump against the
+  swells and undo the ducking.
+- **EQ in front**, if you're dragging dirty lows. Though the tail's Low Cut
+  already helps a lot.
 
-### Mono y estéreo
+### Mono and stereo
 
-Funciona en pistas mono y estéreo, y también **de mono a estéreo**, que es el
-caso típico de guitarra: entra una señal mono y a partir de aquí quieres
-estéreo para que el ping-pong y la anchura tengan dónde actuar.
+It works on mono and stereo tracks, and also **mono to stereo**, which is the
+typical guitar case: a mono signal comes in and from here on you want stereo
+so ping-pong and width have somewhere to act.
 
-Si acabas en una pista mono de verdad, el botón Ping-Pong se apaga y arriba a
-la derecha aparece un aviso `MONO`. En Ableton no lo verás nunca, porque
-Ableton siempre pasa estéreo por la cadena de efectos.
+If you end up on a genuinely mono track, the Ping-Pong button is disabled and
+a `MONO` notice appears at the top right. You'll never see it in Ableton,
+because Ableton always runs stereo through the effect chain.
 
-### Guardar toda la cadena junta
+### Saving the whole chain
 
-Los presets del plugin solo guardan el plugin. Para guardar ampli + compresor +
-EQ + ReverseVerb como una unidad, en Ableton usa un **Audio Effect Rack**: mete
-todo dentro y guárdalo como preset de rack.
+The plugin's presets only save the plugin. To save amp + compressor + EQ +
+ReverseVerb as one unit, in Ableton use an **Audio Effect Rack**: put it all
+inside and save it as a rack preset.
 
 ---
 
-## La pantalla
+## The display
 
-La ambientación es de agujero de gusano, pero lo que se mueve **te está
-contando algo**:
+The theme is a wormhole, but what moves **is telling you something**:
 
-| Lo que ves | Lo que es |
+| What you see | What it is |
 |---|---|
-| Las dos partículas que orbitan la boca del túnel | Los dos "granos" que leen el audio al revés. Su brillo es su volumen real. Se ven alternar y cruzarse. |
-| La torsión del túnel | El Feedback del reverse. |
-| El halo del núcleo | La cantidad de reverb. Se atenúa cuando el ducking actúa. |
-| Los anillos que nacen y mueren | La ventana de cada grano: nada aparece de golpe. |
+| The two particles orbiting the mouth of the tunnel | The two "grains" reading the audio backwards. Their brightness is their real gain. You can see them alternate and cross. |
+| The twist of the tunnel | The reverse Feedback. |
+| The core's halo | The reverb amount. It dims when the ducker acts. |
+| The rings being born and dying | Each grain's window: nothing appears abruptly. |
 
-Los knobs van de **cian a magenta** según su valor, así que el color ya te
-dice dónde están sin leer el número.
+Knobs go from **cyan to magenta** with their value, so the colour already
+tells you where they are without reading the number.
 
-**Medidores** (abajo a la derecha): entrada y salida, de −48 a +6 dB, con
-marca en 0 dB y el tramo por encima en ámbar. No es un limitador, es un aviso:
-con feedback alto, shimmer y drive es fácil pasarse sin notarlo, porque las
-colas largas suben despacio y el oído se acostumbra.
+**Meters** (bottom right): input and output, −48 to +6 dB, with a mark at
+0 dB and the range above it in amber. It's not a limiter, it's a warning: with
+high feedback, shimmer and drive it's easy to overshoot without noticing,
+because long tails rise slowly and your ear adapts.
 
 ---
 
-## Control por MIDI
+## MIDI control
 
-Cualquier knob o botón se puede manejar con un pedal o controlador MIDI. Lo
-que más sentido tiene en directo: **Freeze con un pedal**, **Mix con uno de
-expresión**, y cambiar de preset con los botones de una pedalera.
+Any knob or button can be driven from a pedal or MIDI controller. What makes
+most sense live: **Freeze on a pedal**, **Mix on an expression pedal**, and
+changing presets from a pedalboard's buttons.
 
-### Asignar un control
+### Assigning a control
 
-1. **Clic derecho** sobre el knob o botón → **MIDI Learn**. La etiqueta pasa a
-   decir `· learn...`.
-2. Mueve el control físico (pisa el pedal, gira el knob). Queda asignado y la
-   etiqueta muestra `· CC 64` (o el número que sea).
-3. Para quitarlo: clic derecho → **Quitar CC n**.
+1. **Right-click** the knob or button → **MIDI Learn**. The label changes to
+   `· learning...`.
+2. Move the physical control (press the pedal, turn the knob). It's assigned
+   and the label shows `· CC 64` (or whichever number).
+3. To remove it: right-click → **Remove CC n**.
 
-Al asignar no se aplica el valor: si pisas un pedal para asignarlo a Freeze,
-no se congela todavía.
+Assigning doesn't apply the value: if you press a pedal to assign it to
+Freeze, nothing freezes yet.
 
-### Freeze: momentáneo o toggle
+### Freeze: momentary or toggle
 
-Los botones (Freeze, Sync, Ping-Pong, Reverb Post) tienen dos modos, en el
-mismo menú de clic derecho:
+The buttons (Freeze, Sync, Ping-Pong, Reverb Post) have two modes, in the
+same right-click menu:
 
-- **Momentáneo** (por defecto): el botón sigue al pedal. Con un pedal de
-  sustain, *pisar = Freeze, soltar = suelta*. Es el modo bueno para tocar.
-- **Toggle**: cada pulsación invierte. Para pedaleras que mandan un valor fijo
-  en cada pisada.
+- **Momentary** (default): the button follows the pedal. With a sustain
+  pedal, *press = Freeze, release = let go*. It's the mode for playing.
+- **Toggle**: every press flips it. For pedalboards that send a fixed value on
+  each press.
 
-### Presets desde una pedalera
+### Presets from a pedalboard
 
-Un mensaje **Program Change** carga el preset de fábrica con ese número
-(0 = Swell clásico, 1 = Nube lenta… en el orden del desplegable).
+A **Program Change** message loads the factory preset with that number
+(0 = Swell clasico, 1 = Nube lenta… in dropdown order).
 
 ### Tap tempo
 
-Clic derecho sobre el control **Tempo** → **MIDI Learn (tap tempo)** y asigna
-un botón. Cada pulsación cuenta; a partir de la segunda se fija el tempo con
-la media de las últimas cuatro. Más de 2 s sin pulsar reinicia la cuenta.
-Solo tiene efecto cuando no hay DAW que mande el tempo.
+Right-click the **Tempo** control → **MIDI Learn (tap tempo)** and assign a
+button. Every press counts; from the second one on, the tempo is set from the
+average of the last four. More than 2 s without a press restarts the count.
+It only has an effect when there's no DAW providing the tempo.
 
-### Cómo le llega el MIDI en Ableton
+### How MIDI reaches it in Ableton
 
-Un efecto de audio no recibe MIDI directamente. En una **pista MIDI**, pon
-tu controlador como entrada y en **MIDI To** elige la pista de audio donde
-está ReverseVerb y, en el segundo desplegable, **ReverseVerb**. Arma la pista
-MIDI (o activa el monitor en *In*).
+An audio effect doesn't receive MIDI directly. On a **MIDI track**, set your
+controller as input and under **MIDI To** pick the audio track that holds
+ReverseVerb and, in the second dropdown, **ReverseVerb**. Arm the MIDI track
+(or set monitoring to *In*).
 
-Las asignaciones se guardan con el proyecto.
-
----
-
-## Trucos y cosas que conviene saber
-
-**El Drive ya no alia.** El saturador del lazo trabaja al doble de frecuencia
-de muestreo por dentro. Con Drive alto sobre notas agudas antes aparecía un
-brillo sucio e inarmónico; ahora la saturación es limpia. No hay que tocar
-nada.
-
-**El reverb cambió de motor.** Desde esta versión es una placa (Dattorro) en
-vez del Freeverb de JUCE: colas más largas y lisas, pre-delay y shimmer
-propio. Los presets se calibraron para sonar al mismo volumen, pero la cola
-dura más al mismo `Size`; si un preset tuyo suena más largo de lo que
-recuerdas, baja Size un poco.
-
-**La ventana se adapta a la pantalla.** Arranca al tamaño que quepa en tu
-monitor y se puede redimensionar desde la esquina (mantiene la proporción).
-
-**Freeze es seguro; Feedback al máximo, no.** Freeze no es "feedback infinito":
-es congelar el buffer y dejar de escribir en él, así que el nivel ni sube ni
-baja. Para sustain infinito, usa Freeze.
-
-**El Feedback del reverse tiene un tope interno del 60 %.** Por encima de ahí
-el knob no hace más; es un límite de seguridad para que el lazo nunca se
-dispare. Con **Shimmer** subido, el tope sube hasta el 70 %: el shimmer empuja
-la energía hacia arriba en cada vuelta y esa energía se escapa, así que el lazo
-es más estable. Resultado práctico: con Shimmer puedes subir el Feedback más y
-la cola dura más. El delay convencional no tiene ese problema y su tope está
-en el 95 %.
-
-**Drive Env sigue tu pulsación de verdad.** Se calcula muestra a muestra, así
-que reacciona al ataque, no un poco después.
-
-**Shimmer no es un armonizador.** Tiene un pequeño error de afinación (±20
-cents) que en un sonido shimmer no molesta porque ya es irreal por naturaleza.
-Pero no lo uses esperando un intervalo afinado.
-
-**En el Standalone el tempo lo pones tú.** Sin DAW nadie manda el BPM, así
-que aparece un control **Tempo** junto a Freeze. En cuanto cargas el plugin en
-un DAW, ese control desaparece y el visualizador muestra "host … BPM".
-
-**Wow y Flutter se especifican en "cuánto desafina", no en tiempo.** Por eso
-"Wow al 50 %" suena igual de desafinado a 44.1 kHz que a 96 kHz.
-
-**El bypass del DAW deja que la cola se agote.** Al pulsar bypass en el host,
-la señal directa pasa limpia y el efecto termina de sonar en vez de cortarse
-de golpe.
-
-**Cierra la ventana del plugin si sospechas de cortes.** El visualizador
-repinta 30 veces por segundo. En máquinas justas eso compite con el audio. Con
-la ventana cerrada no repinta nada.
+Assignments are saved with the project.
 
 ---
 
-## Problemas frecuentes
+## Tips and things worth knowing
 
-**Al recompilar dice `cannot open file ... ReverseVerb.vst3`.**
-Ableton (o el DAW) tiene el plugin cargado y bloquea el archivo. Cierra el DAW
-del todo; quitar el plugin de la pista no siempre lo libera.
+**Drive no longer aliases.** The loop's saturator runs at twice the sample
+rate internally. With high Drive on high notes there used to be a dirty,
+inharmonic brightness; now the saturation is clean. Nothing to adjust.
 
-**No aparece Windows ASIO en el Standalone, solo Windows Audio.**
-Es normal: el SDK de ASIO no se puede incluir por licencia. Para probar este
-efecto Windows Audio sobra (la latencia del driver es irrelevante con ventanas
-de cientos de ms). Si lo quieres de todas formas, está explicado en
+**The reverb changed engines.** As of this version it's a plate (Dattorro)
+instead of JUCE's Freeverb: longer, smoother tails, pre-delay and its own
+shimmer. Presets were calibrated to sound at the same volume, but the tail
+lasts longer at the same `Size`; if one of your presets sounds longer than you
+remember, lower Size a bit.
+
+**The window adapts to your screen.** It opens at a size that fits your
+monitor and can be resized from the corner (aspect ratio is kept).
+
+**Freeze is safe; Feedback at max isn't.** Freeze isn't "infinite feedback":
+it freezes the buffer and stops writing to it, so the level neither rises nor
+falls. For infinite sustain, use Freeze.
+
+**Reverse Feedback has an internal ceiling at 60 %.** Above that the knob does
+nothing more; it's a safety limit so the loop can never run away. With
+**Shimmer** up, the ceiling rises to 70 %: shimmer pushes energy upward every
+pass and that energy escapes, so the loop is more stable. Practical result:
+with Shimmer you can push Feedback higher and the tail lasts longer. The
+regular delay doesn't have this problem and its ceiling is 95 %.
+
+**Drive Env really follows your picking.** It's computed sample by sample, so
+it reacts to the attack, not a bit after.
+
+**Shimmer isn't a harmoniser.** It has a small pitch error (±20 cents) that
+doesn't matter in a shimmer sound because it's unreal by nature. But don't
+use it expecting an in-tune interval.
+
+**In the Standalone you set the tempo.** Without a DAW nobody provides the
+BPM, so a **Tempo** control appears next to Freeze. As soon as you load the
+plugin in a DAW, that control disappears and the display shows "host … BPM".
+
+**Wow and Flutter are specified as "how much detune", not time.** That's why
+"Wow at 50 %" sounds equally detuned at 44.1 kHz and at 96 kHz.
+
+**The DAW's bypass lets the tail ring out.** When you hit bypass in the host,
+the direct signal passes clean and the effect finishes sounding instead of
+cutting off.
+
+**Close the plugin window if you suspect dropouts.** The display repaints 30
+times per second. On tight machines that competes with the audio. With the
+window closed nothing repaints.
+
+---
+
+## Troubleshooting
+
+**Rebuilding says `cannot open file ... ReverseVerb.vst3`.**
+Ableton (or the DAW) has the plugin loaded and is locking the file. Close the
+DAW completely; removing the plugin from the track doesn't always release it.
+
+**No ASIO in the Standalone, only Windows Audio.**
+That's normal: the ASIO SDK can't be bundled for licensing reasons. For
+trying this effect Windows Audio is plenty (driver latency is irrelevant with
+windows of hundreds of ms). If you want it anyway, it's explained in
 [TECHNICAL.md](TECHNICAL.md#asio).
 
-**La cola sube de volumen sola y no para.**
-No debería pasar: hay topes internos precisamente para eso. Si te ocurre, abre
-un issue con el preset y los ajustes.
+**The tail gets louder on its own and doesn't stop.**
+It shouldn't: there are internal ceilings precisely for that. If it happens
+to you, open an issue with the preset and settings.
 
-**El plugin se ha caído en el DAW.**
-Antes de volver a cargarlo en un proyecto con trabajo, pruébalo en el
-Standalone: si se cae ahí, cierras la ventana y ya; en un DAW puedes perder la
-sesión y algunos ponen en lista negra los plugins que crashean.
+**The plugin crashed in the DAW.**
+Before loading it again in a project with work in it, try it in the
+Standalone: if it crashes there, you close the window and that's it; in a DAW
+you can lose the session, and some blacklist plugins that crash.
 
 ---
 
-## Para desarrolladores
+## For developers
 
-Compilación a fondo, tests, validación con pluginval, cómo funciona cada motor
-por dentro y las decisiones de diseño que no son obvias:
-**[TECHNICAL.md](TECHNICAL.md)**.
+Full build details, tests, pluginval validation, how each engine works inside
+and the non-obvious design decisions: **[TECHNICAL.md](TECHNICAL.md)**.
 
-Lo pendiente y lo descartado: **[BACKLOG.md](BACKLOG.md)**.
-Lo que hay que oír, medir y probar en un DAW real: **[TESTING.md](TESTING.md)**.
+What's pending and what was dropped: **[BACKLOG.md](BACKLOG.md)**.
+What needs to be heard, measured and tried in a real DAW:
+**[TESTING.md](TESTING.md)**.
+
+(Those three are in Spanish for now.)

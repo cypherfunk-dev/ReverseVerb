@@ -102,8 +102,16 @@ private:
 class BackPanel : public juce::Component
 {
 public:
+    BackPanel();
     void paint (juce::Graphics&) override;
     bool simple = false;   // cambia las cabeceras y el alto del fondo
+
+private:
+    // Decodificado una vez por instancia, SIN ImageCache y sin static: un
+    // Image estatico apoyado en ImageCache se destruye despues del
+    // MessageManager y el proceso se queda colgado al salir (pluginval lo
+    // reprodujo: SUCCESS y nunca terminaba).
+    juce::Image logo;
 };
 
 //==============================================================================

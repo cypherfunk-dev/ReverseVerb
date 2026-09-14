@@ -1,4 +1,4 @@
-# ReverseVerb
+![ReverseVerb](assets/logo.png)
 
 *Español · [English](README.md)*
 

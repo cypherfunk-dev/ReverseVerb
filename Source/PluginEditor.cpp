@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "BinaryData.h"
 
 namespace col
 {
@@ -328,6 +329,12 @@ void Meters::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+BackPanel::BackPanel()
+    : logo (juce::ImageFileFormat::loadFrom (ReverseVerbAssets::logomark_png,
+                                             ReverseVerbAssets::logomark_pngSize))
+{
+}
+
 void BackPanel::paint (juce::Graphics& g)
 {
     // Gradiente radial centrado en la boca del tunel. Es estatico: este
@@ -337,13 +344,18 @@ void BackPanel::paint (juce::Graphics& g)
     g.setGradientFill (bg);
     g.fillAll();
 
+    // Logo: el vortice, 40 px, con el titulo a su derecha.
+    if (logo.isValid())
+        g.drawImage (logo, juce::Rectangle<float> (static_cast<float> (lay::margin), 4.0f, 40.0f, 40.0f),
+                     juce::RectanglePlacement::centred, false);
+
     g.setColour (col::text);
     g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
-    g.drawText ("ReverseVerb", lay::margin, 10, 270, 26, juce::Justification::centredLeft);
+    g.drawText ("ReverseVerb", lay::margin + 48, 8, 200, 26, juce::Justification::centredLeft);
 
     g.setColour (col::violet);
     g.setFont (juce::FontOptions (11.0f));
-    g.drawText (TRANS ("event horizon"), lay::margin, 30, 270, 16,
+    g.drawText (TRANS ("event horizon"), lay::margin + 48, 28, 200, 16,
                 juce::Justification::centredLeft);
 
     // Las cabeceras se quedan con nombres funcionales a proposito: la
@@ -1068,9 +1080,9 @@ void ReverseVerbEditor::resized()
     content.setTransform (juce::AffineTransform::scale (scale));
     content.setBounds (0, 0, lay::W, designHeight());
 
-    simpleBtn.setBounds (168, 12, 62, 24);
-    fullBtn  .setBounds (230, 12, 70, 24);
-    presetBox.setBounds (310, 12, 240, 24);
+    simpleBtn.setBounds (208, 12, 62, 24);
+    fullBtn  .setBounds (270, 12, 70, 24);
+    presetBox.setBounds (350, 12, 200, 24);
     prevBtn  .setBounds (556, 12,  26, 24);
     nextBtn  .setBounds (584, 12,  26, 24);
     saveBtn  .setBounds (616, 12,  70, 24);

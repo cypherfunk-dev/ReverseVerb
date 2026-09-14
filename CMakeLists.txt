@@ -34,8 +34,18 @@ juce_add_plugin(ReverseVerb
     # no es de compilacion. Para desarrollar es mejor apuntar el DAW a la
     # carpeta de build: cada recompilacion queda activa sin copiar nada.
     COPY_PLUGIN_AFTER_BUILD     FALSE
+    # Icono del Standalone (.exe en Windows, .app en macOS). juceaide genera el
+    # .ico / .icns a partir del PNG. El VST3 no lleva icono en Windows.
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/assets/logo-mark.png"
+    ICON_SMALL                  "${CMAKE_CURRENT_SOURCE_DIR}/assets/logo-mark.png"
     FORMATS                     VST3 Standalone
     PRODUCT_NAME                "ReverseVerb")
+
+# El logo va incrustado en el binario: un plugin no puede depender de un PNG
+# en disco. Genera el namespace ReverseVerbAssets (logomark_png / Size).
+juce_add_binary_data(ReverseVerbAssets
+    NAMESPACE ReverseVerbAssets
+    SOURCES assets/logo-mark.png)
 
 target_sources(ReverseVerb PRIVATE
     Source/PluginProcessor.cpp
@@ -53,6 +63,7 @@ target_compile_definitions(ReverseVerb PUBLIC
 
 target_link_libraries(ReverseVerb
     PRIVATE
+        ReverseVerbAssets
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
@@ -120,6 +131,7 @@ target_compile_definitions(ReverseVerbHostTests PRIVATE
     JUCE_USE_CURL=0
     JUCE_DISPLAY_SPLASH_SCREEN=0)
 target_link_libraries(ReverseVerbHostTests PRIVATE
+    ReverseVerbAssets
     juce::juce_audio_utils
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)

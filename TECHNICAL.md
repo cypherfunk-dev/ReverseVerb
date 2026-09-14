@@ -246,6 +246,7 @@ cmake -B build -DASIO_SDK_DIR="C:/SDKs/asiosdk"
 Source/
   PluginProcessor.{h,cpp}   APVTS, parámetros, ruteo, bus layout
   PluginEditor.{h,cpp}      GUI: modos Simple/Completo, visualizador polar, knobs, medidores
+  Localisation.h            idioma de la GUI: inglés fuente + tabla al español
   PresetManager.{h,cpp}     25 presets de fábrica + presets de usuario en %APPDATA%
   MidiControl.{h,cpp}       CC -> parámetro (learn), Program Change -> preset, tap tempo
   Interp.h                  Hermite de 4 puntos para lecturas fraccionarias
@@ -773,6 +774,43 @@ lleva su propio glide. Sigue el reset al reactivar (`reverbActive`).
 
 Parámetros nuevos: `revpre`, `revmod` (default 20 %), `revshim`. Los proyectos
 guardados con Freeverb los cogen por defecto al cargar.
+
+### Logo
+
+`assets/logo-mark.png` (512×512 RGBA) es el vórtice solo; va incrustado en el
+binario con `juce_add_binary_data(ReverseVerbAssets)` y se pinta a 40 px en la
+cabecera (`BackPanel::paint`, decodificado una vez con `ImageCache`). Se
+obtuvo del SVG de Canva (que en realidad envuelve PNGs sobre blanco): alfa por
+distancia al blanco (`1 − min(r,g,b)/255`), des-premultiplicado, más un halo
+difuminado y un núcleo cian que el fondo blanco se había comido. El script
+está en el historial de la sesión, no en el repo: si el logo cambia, basta con
+reemplazar el PNG. `assets/logo.png` es el banner del README (mark + Bahnschrift). El mismo PNG
+es el icono del Standalone (`ICON_BIG`/`ICON_SMALL` en `juce_add_plugin`;
+juceaide genera el `.ico`). El VST3 no lleva icono en Windows.
+
+Lección: la imagen se guarda como **miembro** de `BackPanel`, decodificada con
+`ImageFileFormat::loadFrom`, no como `static` apoyado en `ImageCache`. Con el
+static, pluginval daba SUCCESS y el proceso nunca terminaba: el estático se
+destruía después del `MessageManager` y `ImageCache` (que tiene un timer) se
+quedaba esperando.
+
+### Idioma de la interfaz
+
+`Localisation.h`. El idioma **fuente** del código es el inglés: todo texto
+visible va en inglés envuelto en `TRANS()`. Una tabla `juce::LocalisedStrings`
+al español se activa en `initLocalisation()` (llamada desde el constructor del
+procesador, antes de que exista el editor) si `SystemStats::getUserLanguage()`
+empieza por `es`. `REVERSEVERB_LANG=en|es` lo fuerza para probar sin cambiar
+el idioma de la máquina.
+
+No se traducen: los nombres de parámetros que ve el host (los DAW no
+localizan), los nombres de presets (son nombres propios y viajan en el
+estado), ni los nombres de controles (Length, Feedback…: vocabulario técnico
+universal). `routingNames()` devuelve inglés ("Parallel") y la GUI lo pasa por
+`TRANS()` al mostrarlo.
+
+Añadir un idioma: otra tabla y otra rama en `initLocalisation()`. Cuidado con
+`)"` dentro de la tabla: el raw string usa delimitador `i18n(...)i18n`.
 
 ### GUI: Simple y Completo
 
