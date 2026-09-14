@@ -166,13 +166,22 @@ private:
     Knob length, revFb, drive, driveEnv, revLow, revHigh;
     Knob dTime, dFb, dLow, dHigh, dMod, dModRate;
     Knob wow, flutter, detune, shimmer, shimPitch;
-    Knob revAmt, revSize, revDamp, mix, duck, duckRel;
+    Knob revAmt, revSize, revDamp, revPre, revMod, revShim;
+    Knob mix, duck, duckRel, outGain;
 
     MidiToggle syncButton   { "Sync" };
     MidiToggle freezeButton { "Freeze" };
     MidiToggle dSyncButton  { "Sync" };
     MidiToggle pingButton   { "Ping-Pong" };
     MidiToggle postButton   { "Reverb despues del reverse" };
+    MidiToggle steepButton  { "LC 12 dB" };
+
+    // Barras (como Tempo) para lo que no cabe como knob: release del Freeze
+    // en la fila de REVERSE y balance Rev/Dly en la de DELAY.
+    MidiSlider   frzRelSlider, balSlider;
+    juce::Label  frzRelLabel,  balLabel;
+    std::unique_ptr<SliderAtt> frzRelAtt, balAtt;
+    std::unique_ptr<ButtonAtt> steepAtt;
     juce::ComboBox divisionBox, dDivisionBox, routingBox;
 
     // Tempo manual. Solo se ve cuando el host no da BPM (Standalone): con host

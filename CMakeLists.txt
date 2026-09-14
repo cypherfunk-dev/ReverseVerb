@@ -97,3 +97,29 @@ target_link_libraries(ReverseVerbTests PRIVATE Threads::Threads)
 if(MSVC)
     target_compile_options(ReverseVerbTests PRIVATE /O2)
 endif()
+
+# --- Tests a nivel de procesador --------------------------------------------
+# Consola con JUCE que instancia ReverseVerbProcessor de verdad: bloques raros,
+# bypass con cola, estado, presets, MIDI. Cubre el hueco entre la suite de DSP
+# (motores sin JUCE) y pluginval (contrato con el host). No abre ventanas.
+#
+#   cmake --build build --config Release --target ReverseVerbHostTests
+#   build\Release\ReverseVerbHostTests.exe
+juce_add_console_app(ReverseVerbHostTests PRODUCT_NAME "ReverseVerbHostTests")
+target_sources(ReverseVerbHostTests PRIVATE
+    tests/host_tests.cpp
+    Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
+    Source/PresetManager.cpp
+    Source/MidiControl.cpp)
+target_include_directories(ReverseVerbHostTests PRIVATE Source)
+target_compile_definitions(ReverseVerbHostTests PRIVATE
+    JucePlugin_Name="ReverseVerb"
+    JUCE_MODAL_LOOPS_PERMITTED=1      # runDispatchLoopUntil, para bombear el AsyncUpdater del MIDI
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0)
+target_link_libraries(ReverseVerbHostTests PRIVATE
+    juce::juce_audio_utils
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)

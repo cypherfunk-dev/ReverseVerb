@@ -238,6 +238,18 @@ namespace
             { "wow", 25 }, { "detune", 18 },
             { "revamt", 70 }, { "revsize", 90 }, { "revdamp", 35 },
             { "mix", 65 }, { "duck", 25 }, { "duckrel", 600 } } },
+
+        // --- placa de Dattorro (shimmer canonico) ---
+        // El shimmer va DENTRO del lazo del reverb (revshim), no del reverse:
+        // octavas apiladas sobre una cola de placa. El reverse queda corto y
+        // con poco feedback, de condimento; el protagonista es la cola.
+        { "Placa de cristal", {
+            { "length", 350 }, { "feedback", 20 },
+            { "highpass", 120 }, { "lowpass", 12000 },
+            { "revamt", 78 }, { "revsize", 88 }, { "revdamp", 30 },
+            { "revpre", 25 }, { "revmod", 35 }, { "revshim", 45 }, { "shimpitch", 12 },
+            { "detune", 8 },
+            { "mix", 55 }, { "duck", 45 }, { "duckrel", 500 } } },
     };
 
     constexpr int kNumFactory = static_cast<int> (sizeof (kFactory) / sizeof (kFactory[0]));

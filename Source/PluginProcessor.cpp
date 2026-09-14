@@ -148,6 +148,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout ReverseVerbProcessor::create
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "revdamp", 1 }, "Damp",
         pctRange(), 40.0f, lab ("%")));
     l.add (std::make_unique<SnappedBoolParameter>  (ParameterID { "revpost", 1 }, "Reverb Post", true));
+    // Los tres siguientes llegaron con la placa de Dattorro (van al final del
+    // layout por la regla de siempre). Mod a 20 % por defecto: es lo que hace
+    // que una cola larga no suene metalica, y a ese nivel no se oye como
+    // chorus. Los proyectos guardados con Freeverb lo cogen al cargar.
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "revpre", 1 }, "Pre-Delay",
+        NormalisableRange<float> (0.0f, 200.0f, 1.0f, 0.6f), 0.0f, lab ("ms")));
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "revmod", 1 }, "Rev Mod",
+        pctRange(), 20.0f, lab ("%")));
+    // Shimmer CANONICO: pitch shift dentro del lazo del reverb. Comparte
+    // Shim Pitch con el shimmer del reverse, que es otro sonido y convive.
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "revshim", 1 }, "Rev Shimmer",
+        pctRange(), 0.0f, lab ("%")));
 
     // --- OUTPUT ---
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "mix", 1 }, "Mix",
@@ -163,6 +175,23 @@ juce::AudioProcessorValueTreeState::ParameterLayout ReverseVerbProcessor::create
     // dependen del orden, pero los indices de automatizacion de algun host si.
     l.add (std::make_unique<AudioParameterFloat> (ParameterID { "tempo", 1 }, "Tempo",
         NormalisableRange<float> (40.0f, 300.0f, 0.1f), 120.0f, lab ("BPM")));
+
+    // --- anadidos despues (al final, como siempre) ---
+    // Dos polos en el Low Cut del reverse (12 dB/oct) en vez de uno.
+    l.add (std::make_unique<SnappedBoolParameter> (ParameterID { "hpsteep", 1 }, "Rev LC 12dB", false));
+    // Al soltar Freeze, lo congelado se apaga en este tiempo en vez de
+    // cortarse en una ventana. 400 ms por defecto: se nota como un "suelta"
+    // natural sin llegar a cola.
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "freezerel", 1 }, "Freeze Rel",
+        NormalisableRange<float> (0.0f, 2000.0f, 1.0f, 0.5f), 400.0f, lab ("ms")));
+    // Balance entre las ramas en Paralelo: -100 = solo reverse, +100 = solo
+    // delay, 0 = las dos a 0.707 (potencia constante), que era lo de antes.
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "parbal", 1 }, "Rev/Dly",
+        NormalisableRange<float> (-100.0f, 100.0f, 1.0f), 0.0f, lab ("%")));
+    // Trim de salida. Con feedback, shimmer y drive es facil pasarse y hasta
+    // ahora la unica forma de bajar era tocar Mix, que cambia el balance.
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID { "outgain", 1 }, "Output",
+        NormalisableRange<float> (-24.0f, 12.0f, 0.1f), 0.0f, lab ("dB")));
 
     return l;
 }
@@ -190,9 +219,12 @@ ReverseVerbProcessor::ReverseVerbProcessor()
 
     pRevAmt  = get ("revamt");   pRevSize = get ("revsize");
     pRevDamp = get ("revdamp");  pRevPost = get ("revpost");
+    pRevPre  = get ("revpre");   pRevMod  = get ("revmod");   pRevShim = get ("revshim");
 
     pMix     = get ("mix");      pDuck    = get ("duck");    pDuckRel = get ("duckrel");
     pTempo   = get ("tempo");
+    pHpSteep = get ("hpsteep");  pFreezeRel = get ("freezerel");
+    pParBal  = get ("parbal");   pOutGain   = get ("outgain");
 }
 
 juce::AudioProcessorEditor* ReverseVerbProcessor::createEditor()
@@ -257,20 +289,24 @@ void ReverseVerbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     wetBuffer.clear();
     parBuffer.clear();
 
-    reverb.setSampleRate (sampleRate);
-    reverb.reset();
+    reverb.prepare (sampleRate);
+    reverb.setPreDelayMs (pRevPre->load());
 
     const float mix0 = pMix->load() * 0.01f;
     drySmoothed.reset (sampleRate, 0.02);
     wetSmoothed.reset (sampleRate, 0.02);
     drySmoothed.setCurrentAndTargetValue (1.0f - mix0);
     wetSmoothed.setCurrentAndTargetValue (mix0);
+    outSmoothed.reset (sampleRate, 0.02);
+    outSmoothed.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (pOutGain->load()));
 
     revFbSm   = pFeedback->load() * 0.01f;
     echoFbSm  = pDFeed->load()    * 0.01f;
     revAmtSm  = pRevAmt->load()   * 0.01f;
     revSizeSm = pRevSize->load()  * 0.01f;
     revDampSm = pRevDamp->load()  * 0.01f;
+    revModSm  = pRevMod->load()   * 0.01f;
+    revShimSm = pRevShim->load()  * 0.01f;
     reverbActive = revAmtSm > 0.0001f;
     bypassed     = false;
 
@@ -418,6 +454,8 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         d.setReadRate (std::pow (2.0f, sign * detuneCents / 1200.0f));
 
         d.setShimmer (pShimmer->load() * 0.01f, pShimPitch->load());
+        d.setLowCutSteep (pHpSteep->load() > 0.5f);
+        d.setFreezeRelease (pFreezeRel->load() * 0.001f);
     }
 
     // --- wow y flutter ----------------------------------------------------
@@ -471,14 +509,19 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     const float mixTarget = pMix->load() * 0.01f;
     drySmoothed.setTargetValue (bypassed ? 1.0f : 1.0f - mixTarget);
     wetSmoothed.setTargetValue (mixTarget);
+    // En bypass la seca sale a 0 dB: el trim es del efecto, no del canal.
+    outSmoothed.setTargetValue (bypassed ? 1.0f : juce::Decibels::decibelsToGain (pOutGain->load()));
 
-    // Reverb: los tres parametros suavizados, porque juce::Reverb los aplica
-    // de golpe y automatizarlos daba escalones. Y si estaba en bypass (amount
-    // a 0) y vuelve a subir, se resetea: si no, soltaba la cola rancia que
+    // Reverb: los parametros suavizados a ritmo de bloque, porque la placa
+    // los aplica de golpe y automatizarlos daria escalones (el pre-delay es
+    // la excepcion: lleva su propio glide). Y si estaba en bypass (amount a
+    // 0) y vuelve a subir, se resetea: si no, soltaba la cola rancia que
     // tenia dentro de cuando se apago.
     revAmtSm  = blockSmooth (revAmtSm,  pRevAmt->load()  * 0.01f, numSamples, 0.05f);
     revSizeSm = blockSmooth (revSizeSm, pRevSize->load() * 0.01f, numSamples, 0.05f);
     revDampSm = blockSmooth (revDampSm, pRevDamp->load() * 0.01f, numSamples, 0.05f);
+    revModSm  = blockSmooth (revModSm,  pRevMod->load()  * 0.01f, numSamples, 0.05f);
+    revShimSm = blockSmooth (revShimSm, pRevShim->load() * 0.01f, numSamples, 0.05f);
 
     const float revAmt = revAmtSm;
     const bool  revOn  = revAmt > 0.0001f;
@@ -486,27 +529,44 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         reverb.reset();
     reverbActive = revOn;
 
-    juce::Reverb::Parameters rp;
-    rp.roomSize   = revSizeSm;
-    rp.damping    = revDampSm;
-    rp.width      = 1.0f;
-    rp.freezeMode = 0.0f;
-    // El wet interno de juce::Reverb se escala por 3, asi que 0.4 ya es
-    // "reverb a tope" sin que pegue un salto de nivel.
-    rp.wetLevel   = revAmt * 0.4f;
-    rp.dryLevel   = 1.0f - revAmt;
-    reverb.setParameters (rp);
+    reverb.setSize (revSizeSm);
+    reverb.setDamping (revDampSm);
+    reverb.setModulation (revModSm);
+    reverb.setPreDelayMs (pRevPre->load());          // lleva su propio glide
+    reverb.setShimmer (revShimSm, pShimPitch->load());
 
     ducker.setRelease (pDuckRel->load());
 
     // --- helpers ---------------------------------------------------------
+    // La placa devuelve solo la senal humeda; la mezcla con la seca se hace
+    // aqui: out = in*(1-amt) + placa*amt. La ganancia de salida de la placa
+    // esta calibrada para que "amt" pese lo mismo que con juce::Reverb.
     auto applyReverb = [&] (juce::AudioBuffer<float>& b)
     {
         if (revAmt <= 0.0001f)
             return;
 
-        if (numCh >= 2) reverb.processStereo (b.getWritePointer (0), b.getWritePointer (1), numSamples);
-        else            reverb.processMono   (b.getWritePointer (0), numSamples);
+        auto* L = b.getWritePointer (0);
+        auto* R = numCh >= 2 ? b.getWritePointer (1) : nullptr;
+        const float dryG = 1.0f - revAmt;
+
+        for (int n = 0; n < numSamples; ++n)
+        {
+            const float inL = L[n];
+            const float inR = R != nullptr ? R[n] : inL;
+            float wl = inL, wr = inR;
+            reverb.process (wl, wr);
+
+            if (R != nullptr)
+            {
+                L[n] = inL * dryG + wl * revAmt;
+                R[n] = inR * dryG + wr * revAmt;
+            }
+            else
+            {
+                L[n] = inL * dryG + 0.5f * (wl + wr) * revAmt;
+            }
+        }
     };
 
     auto runReverse = [&] (juce::AudioBuffer<float>& b)
@@ -594,14 +654,22 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             runReverse (wetBuffer);
             runEcho (parBuffer);
 
-            // 0.7 en cada rama: dos senales decorrelacionadas suman en
-            // potencia, asi que sumarlas a 1.0 dispararia el nivel.
-            for (int ch = 0; ch < numCh; ++ch)
+            // Balance en potencia constante: dos senales decorrelacionadas
+            // suman en potencia, asi que cos/sin. En el centro 0.707 + 0.707,
+            // que era el 0.7 fijo de antes.
             {
-                auto* w = wetBuffer.getWritePointer (ch);
-                const auto* p = parBuffer.getReadPointer (ch);
-                for (int n = 0; n < numSamples; ++n)
-                    w[n] = 0.7f * w[n] + 0.7f * p[n];
+                const float bal   = juce::jlimit (-1.0f, 1.0f, pParBal->load() * 0.01f);
+                const float theta = (bal + 1.0f) * juce::MathConstants<float>::pi * 0.25f;
+                const float gRev  = std::cos (theta);
+                const float gDly  = std::sin (theta);
+
+                for (int ch = 0; ch < numCh; ++ch)
+                {
+                    auto* w = wetBuffer.getWritePointer (ch);
+                    const auto* p = parBuffer.getReadPointer (ch);
+                    for (int n = 0; n < numSamples; ++n)
+                        w[n] = gRev * w[n] + gDly * p[n];
+                }
             }
             break;
 
@@ -628,6 +696,7 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     {
         const float dryGain = drySmoothed.getNextValue();
         const float wetGain = wetSmoothed.getNextValue();
+        const float outGain = outSmoothed.getNextValue();
 
         // El ducking mira la senal SECA, que es la que toca el musico.
         float dryAbs = 0.0f;
@@ -640,8 +709,8 @@ void ReverseVerbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         for (int ch = 0; ch < numCh; ++ch)
         {
             auto* out = buffer.getWritePointer (ch);
-            out[n] = out[n] * dryGain
-                   + wetBuffer.getReadPointer (ch)[n] * wetGain * duck;
+            out[n] = (out[n] * dryGain
+                   + wetBuffer.getReadPointer (ch)[n] * wetGain * duck) * outGain;
         }
     }
 

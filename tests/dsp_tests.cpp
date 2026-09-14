@@ -28,10 +28,13 @@
 #include "TapeMod.h"
 #include "PitchShifter.h"
 #include "Interp.h"
+#include "PlateReverb.h"
+#include "Saturator.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <cstdio>
 #include <cstring>
 #include <chrono>
@@ -533,6 +536,29 @@ void testPitchShifter()
     // depende de la frecuencia de entrada por la interferencia del crossfade.
     check ("pitch shifter desplaza la altura", worst < 60.0,
            "peor error " + f (worst, 1) + " cents (limite del metodo granular)");
+
+    // Ganancia: dentro de un lazo (shimmer) una perdida por pasada se
+    // acumula y las octavas superiores se apagan antes de nacer. Se mide el
+    // RMS de salida contra el de entrada en varias frecuencias.
+    std::string gains; double worstDb = 0.0;
+    for (float st : { 12.0f, -12.0f })
+    for (double hz : { 220.0, 880.0, 3520.0 })
+    {
+        PitchShifter p;
+        p.prepare (sr);
+        p.setSemitones (st);
+        double ei = 0, eo = 0;
+        for (int n = 0; n < N; ++n)
+        {
+            const float x = (float) std::sin (2.0 * kPi * hz * n / sr);
+            const float y = p.process (x);
+            if (n >= sr / 2) { ei += x * x; eo += y * y; }
+        }
+        const double db = 10.0 * std::log10 (eo / ei);
+        worstDb = std::max (worstDb, std::fabs (db));
+        gains += f (st, 0) + "st@" + f (hz, 0) + ":" + f (db, 1) + "dB ";
+    }
+    check ("pitch shifter: ganancia unidad", worstDb < 2.0, gains);
 }
 
 /** El shimmer no debe desestabilizar el lazo. Al contrario: empuja la energia
@@ -710,6 +736,357 @@ void testPingPong()
     run (false, l1, r1, l2, r2);
     check ("sin ping-pong se queda en su canal", l1 > r1 * 4.0 + 1e-9 && l2 > r2 * 4.0 + 1e-9,
            "eco1 L/R " + fmt (l1, r1) + "   eco2 L/R " + fmt (l2, r2));
+}
+
+
+//==============================================================================
+//  SATURADOR, FREEZE RELEASE, LOW CUT 12 dB
+//==============================================================================
+
+/** Energia en una banda de +-3 % alrededor de hz sobre y (Goertzel). */
+static double bandEnergy (const std::vector<float>& y, double sr, double hz)
+{
+    double e = 0.0;
+    for (double fq = hz * 0.97; fq <= hz * 1.03; fq += hz * 0.003)
+    {
+        const double w = 2.0 * kPi * fq / sr, c = 2.0 * std::cos (w);
+        double s1 = 0, s2 = 0;
+        for (float x : y) { const double s0 = x + c * s1 - s2; s2 = s1; s1 = s0; }
+        e += s1 * s1 + s2 * s2 - c * s1 * s2;
+    }
+    return e;
+}
+
+/** tanh(8x) sobre un seno de 4 kHz: el 9o armonico (36 kHz) se pliega a
+    8.1 kHz y el 7o (28 kHz) a 16.1 kHz. El saturador a 2x tiene que rebajar
+    esos aliasing de forma clara sin tocar la fundamental. */
+void testSaturatorAliasing()
+{
+    const double sr = 44100.0, f0 = 4000.0;
+    const int N = (int) sr;
+
+    std::vector<float> naive (N), over (N);
+    Saturator sat; sat.setDrive (8.0f);
+    for (int n = 0; n < N; ++n)
+    {
+        const float x = 0.5f * (float) std::sin (2.0 * kPi * f0 * n / sr);
+        naive[n] = std::tanh (8.0f * x) / 8.0f;
+        over[n]  = sat.process (x);
+    }
+
+    auto dB = [] (double a, double b) { return 10.0 * std::log10 (a / b); };
+    const double fundN = bandEnergy (naive, sr, f0),      fundO = bandEnergy (over, sr, f0);
+    const double a9N   = bandEnergy (naive, sr, 8100.0),  a9O   = bandEnergy (over, sr, 8100.0);
+    const double a7N   = bandEnergy (naive, sr, 16100.0), a7O   = bandEnergy (over, sr, 16100.0);
+
+    const double alias9Naive = dB (a9N, fundN), alias9Over = dB (a9O, fundO);
+    const double alias7Naive = dB (a7N, fundN), alias7Over = dB (a7O, fundO);
+    const double fundLoss    = dB (fundO, fundN);
+
+    check ("saturador 2x: menos aliasing, misma fundamental",
+           alias9Naive - alias9Over > 12.0 && alias7Naive - alias7Over > 6.0 && std::fabs (fundLoss) < 1.0,
+           "9o armonico plegado a 8.1 kHz: " + f (alias9Naive, 1) + " -> " + f (alias9Over, 1) + " dB; "
+           + "7o a 16.1 kHz: " + f (alias7Naive, 1) + " -> " + f (alias7Over, 1) + " dB; "
+           + "fundamental " + f (fundLoss, 2) + " dB");
+}
+
+/** Al soltar Freeze con release, el colchon se apaga en vez de cortarse:
+    sigue sonando poco despues, esta casi extinguido al final del release, y
+    no hay saltos. Con release 0 se va en una ventana, como siempre. */
+void testFreezeRelease()
+{
+    const int sr = 48000, L = sr / 5;   // 200 ms
+    int worstAt = -1;
+    auto run = [&] (float releaseSec, double& early, double& late, float& worstJump, double& ref)
+    {
+        ReverseDelay d;
+        d.prepare (sr * 2, L, sr);
+        d.setFreezeRelease (releaseSec);
+
+        // Seno y no ruido: con ruido blanco la diferencia entre muestras
+        // consecutivas es ruido (+-1.2 medido) y un click no se distingue.
+        // Con un seno la derivada natural es ~0.03 por muestra. 223 Hz y una
+        // duracion no redonda para que la costura NO caiga en un cruce por
+        // cero (con 220 Hz y 1 s exacto caia siempre y el click se escondia).
+        // Feedback 0 para aislar el release: con 0.3 el propio feedback del
+        // usuario mantiene la cola y enmascara la diferencia.
+        for (int n = 0; n < sr + 1000; ++n)
+            d.process (0.5f * (float) std::sin (2.0 * kPi * 223.0 * n / sr), 0.0f);   // 1 s de material
+        d.setFrozen (true);
+        double e = 0; float prev = 0.0f;
+        for (int n = 0; n < sr; ++n) { const float y = d.process (0.0f, 0.0f); e += y * y; prev = y; }
+        ref = std::sqrt (e / sr);                                          // nivel congelado
+        d.setFrozen (false);
+
+        double e1 = 0, e2 = 0; worstJump = 0.0f;
+        const int w = sr / 10;                                             // ventanas de 100 ms
+        for (int n = 0; n < sr * 3; ++n)
+        {
+            const float y = d.process (0.0f, 0.0f);
+            if (std::fabs (y - prev) > worstJump) { worstJump = std::fabs (y - prev); worstAt = n; }
+            prev = y;
+            if (n >= 2 * L && n < 2 * L + w)          e1 += y * y;        // justo tras 2 ventanas
+            if (n >= sr * 3 - w)                      e2 += y * y;        // al final (3 s)
+        }
+        early = std::sqrt (e1 / w); late = std::sqrt (e2 / w);
+    };
+
+    double ref, early, late; float jump;
+    run (1.5f, early, late, jump, ref);
+    const double earlyDb = 20.0 * std::log10 (early / ref), lateDb = 20.0 * std::log10 (late / ref);
+
+    double ref0, early0, late0; float jump0;
+    run (0.0f, early0, late0, jump0, ref0);
+    const double early0Db = 20.0 * std::log10 (early0 / ref0 + 1e-12);
+
+    // Con 1.5 s de release la curva es -60 dB/1.5 s: a los 0.4 s (2 ventanas
+    // de 200 ms) toca -16 dB. Con 0 s, a esa altura ya no queda nada.
+    check ("freeze release: se apaga en vez de cortarse",
+           earlyDb > -22.0 && earlyDb < -10.0 && lateDb < -40.0 && early0Db < -40.0
+           && jump < 0.1f && jump0 < 0.1f,
+           "con 1.5 s: tras 2 ventanas " + f (earlyDb, 1) + " dB, a los 3 s " + f (lateDb, 1)
+           + " dB, salto max " + f (jump, 3) + "; con 0 s: tras 2 ventanas " + f (early0Db, 1)
+           + " dB, salto max " + f (jump0, 3) + " en la muestra " + std::to_string (worstAt)
+           + " (L=" + std::to_string (L) + ")");
+}
+
+/** Con el Low Cut a 12 dB/oct los graves del lazo se apagan antes. */
+void testLowCutSteep()
+{
+    const int sr = 48000, L = sr / 4;
+    auto tailAt100Hz = [&] (bool steep)
+    {
+        ReverseDelay d;
+        d.prepare (sr * 2, L, sr);
+        d.setFeedbackTone (300.0f, 20000.0f);
+        d.setLowCutSteep (steep);
+        std::vector<float> y;
+        for (int n = 0; n < sr * 3; ++n)
+        {
+            const float x = n < sr ? 0.5f * (float) std::sin (2.0 * kPi * 100.0 * n / sr) : 0.0f;
+            const float o = d.process (x, 0.6f);
+            if (n >= sr * 2) y.push_back (o);
+        }
+        return bandEnergy (y, sr, 100.0);
+    };
+    const double one = tailAt100Hz (false), two = tailAt100Hz (true);
+    const double dB = 10.0 * std::log10 (two / one);
+    check ("low cut 12 dB: los graves del lazo decaen antes", dB < -6.0,
+           "100 Hz en la cola con 2 polos vs 1: " + f (dB, 1) + " dB");
+}
+
+//==============================================================================
+//  REVERB (placa de Dattorro)
+//==============================================================================
+
+/** Nivel de la cola tras `secs` segundos de silencio para una configuracion. */
+static double plateTail (double sr, float size, float damp, float mod, float shim, float st, int secs,
+                         bool sines = false)
+{
+    PlateReverb rv;
+    rv.prepare (sr);
+    rv.setSize (size); rv.setDamping (damp); rv.setModulation (mod);
+    rv.setShimmer (shim, st);
+
+    Noise rng;
+    const int burst = (int) sr;
+    const int total = (int) sr * (secs + 1);
+    double peak = 0.0;
+    for (int n = 0; n < total; ++n)
+    {
+        float l = 0.0f;
+        if (n < burst)
+        {
+            // Ruido blanco tiene la mitad de su energia por encima de 22 kHz a
+            // 96k y el filtro de entrada se la come: para comparar sample
+            // rates hay que excitar con algo de banda limitada.
+            if (sines)
+                for (float hz : { 200.0f, 1000.0f, 3000.0f })
+                    l += 0.15f * std::sin (2.0f * 3.14159265f * hz * (float) n / (float) sr);
+            else
+                l = 0.5f * rng.next();
+        }
+        float r = l;
+        rv.process (l, r);
+        if (n >= total - (int) sr)
+            peak = std::max (peak, (double) std::max (std::fabs (l), std::fabs (r)));
+    }
+    return peak;
+}
+
+/** Con todo al maximo (size 1, sin damping, mod y shimmer a tope, arriba y
+    abajo) la cola tiene que seguir bajando: 30 s despues de cortar la
+    entrada no puede quedar mas de -40 dB. */
+void testPlateStability()
+{
+    const double sr = 44100.0;
+    const std::vector<float> sizes = { 0.7f, 1.0f };
+    const std::vector<float> damps = { 0.0f, 0.8f };
+    const std::vector<float> mods  = fullSweep ? std::vector<float>{ 0.f, 0.5f, 1.f } : std::vector<float>{ 0.f, 1.f };
+    struct Sh { float amt, st; };
+    const std::vector<Sh> shims = { { 0.f, 12.f }, { 1.f, 12.f }, { 1.f, -12.f }, { 0.5f, 7.f } };
+
+    const int totalCombos = (int) (sizes.size() * damps.size() * mods.size() * shims.size());
+    int combo = 0;
+    double worst = 0.0; std::string worstAt;
+
+    for (float sz : sizes) for (float dp : damps) for (float md : mods) for (auto sh : shims)
+    {
+        progress (++combo, totalCombos);
+        const double p = plateTail (sr, sz, dp, md, sh.amt, sh.st, 30);
+        if (p > worst) { worst = p; worstAt = "size " + f (sz, 1) + " damp " + f (dp, 1) + " mod " + f (md, 1)
+                                          + " shim " + f (sh.amt, 1) + "@" + f (sh.st, 0); }
+    }
+    if (fullSweep) std::printf ("\r%60s\r", "");
+
+    check ("placa: la cola siempre decae", worst < 0.01,
+           "peor pico 30 s tras cortar: " + f (worst, 5) + " (" + worstAt + ")");
+}
+
+/** El pre-delay tiene que ser exacto: nada sale antes. */
+void testPlatePreDelay()
+{
+    const double sr = 48000.0;
+    PlateReverb rv;
+    rv.prepare (sr);
+    rv.setSize (0.5f); rv.setPreDelayMs (100.0f);
+
+    // el glide del pre-delay tarda unos ms en asentarse: se deja correr en silencio
+    for (int n = 0; n < (int) sr; ++n) { float l = 0.0f, r = 0.0f; rv.process (l, r); }
+
+    const int pre = (int) (0.1 * sr);
+    int first = -1;
+    for (int n = 0; n < pre * 2; ++n)
+    {
+        float l = n == 0 ? 1.0f : 0.0f, r = l;
+        rv.process (l, r);
+        if (first < 0 && (std::fabs (l) > 1e-6f || std::fabs (r) > 1e-6f)) first = n;
+    }
+
+    // El primer tap de salida esta a 266 muestras (a 29761 Hz) del tanque.
+    const int earliestTap = (int) (266.0 * sr / 29761.0);
+    check ("placa: pre-delay exacto", first >= pre && first <= pre + earliestTap + 8,
+           "primera salida en " + std::to_string (first) + ", pre-delay " + std::to_string (pre)
+           + " + primer tap " + std::to_string (earliestTap));
+}
+
+/** Entrada mono, salida ancha: L y R de la cola tienen que estar decorreladas. */
+void testPlateStereo()
+{
+    const double sr = 44100.0;
+    PlateReverb rv;
+    rv.prepare (sr);
+    rv.setSize (0.8f); rv.setDamping (0.3f);
+
+    Noise rng;
+    double ll = 0, rr = 0, lr = 0;
+    for (int n = 0; n < (int) sr * 3; ++n)
+    {
+        float l = n < (int) sr / 4 ? 0.5f * rng.next() : 0.0f, r = l;
+        rv.process (l, r);
+        if (n > (int) sr / 2) { ll += l * l; rr += r * r; lr += l * r; }
+    }
+    const double corr = lr / std::sqrt (ll * rr);
+    check ("placa: salida estereo decorrelada", std::fabs (corr) < 0.3 && ll > 0 && rr > 0,
+           "correlacion L/R de la cola " + f (corr, 3));
+}
+
+/** Con shimmer, la energia de la cola tiene que subir de octava: se mide con
+    Goertzel en 220 Hz y sus octavas sobre el ultimo segundo. Sin shimmer
+    todo queda en 220; con shimmer las octavas superiores tienen que dominar,
+    pero el paso bajo de la rama debe impedir que se escape a siseo. */
+void testPlateShimmer()
+{
+    const double sr = 44100.0;
+    const std::vector<double> octaves = { 220, 440, 880, 1760, 3520, 7040, 14080 };
+
+    auto bands = [&] (float shim)
+    {
+        PlateReverb rv;
+        rv.prepare (sr);
+        rv.setSize (1.0f); rv.setDamping (0.0f); rv.setShimmer (shim, 12.0f);
+
+        std::vector<float> tail;
+        for (int n = 0; n < (int) sr * 4; ++n)
+        {
+            float l = n < (int) sr ? 0.5f * std::sin (2.0f * 3.14159265f * 220.0f * (float) n / (float) sr) : 0.0f;
+            float r = l;
+            rv.process (l, r);
+            if (n >= (int) sr * 3) tail.push_back (l);
+        }
+
+        // Energia por BANDA (+-7 % alrededor de cada octava), no en el bin
+        // exacto: el shifter granular tiene +-20 cents de error, que a 880 Hz
+        // son +-12 Hz, y un Goertzel de 1 s (1 Hz de resolucion) no los veria.
+        std::vector<double> e;
+        for (double hz : octaves)
+        {
+            double band = 0.0;
+            for (double fq = hz * 0.93; fq <= hz * 1.07; fq += hz * 0.005)
+            {
+                const double w = 2.0 * 3.14159265358979 * fq / sr, c = 2.0 * std::cos (w);
+                double s1 = 0, s2 = 0;
+                for (float x : tail) { const double s0 = x + c * s1 - s2; s2 = s1; s1 = s0; }
+                band += s1 * s1 + s2 * s2 - c * s1 * s2;
+            }
+            e.push_back (band);
+        }
+        const double total = std::accumulate (e.begin(), e.end(), 0.0) + 1e-30;
+        for (auto& v : e) v /= total;
+        return e;
+    };
+
+    const auto dry = bands (0.0f), half = bands (0.5f), full = bands (1.0f);
+
+    auto dist = [&] (const std::vector<double>& e)
+    {
+        std::string d;
+        for (size_t i = 0; i < octaves.size(); ++i)
+            d += f (octaves[i], 0) + ":" + f (100.0 * e[i], 0) + "% ";
+        return d;
+    };
+
+    // Al 50 % en cada vuelta la mitad se queda y la mitad sube: tiene que
+    // haber varias octavas sonando a la vez (el "acorde" del shimmer).
+    int octavesAlive = 0;
+    for (size_t i = 0; i < 5; ++i) if (half[i] > 0.05) ++octavesAlive;
+
+    check ("placa: shimmer al 50 % apila octavas", dry[0] > 0.9 && octavesAlive >= 3,
+           "sin shimmer " + f (100.0 * dry[0], 0) + "% en 220 Hz; al 50 %: " + dist (half));
+
+    // Al 100 % TODO sube cada vuelta: en 2 s ya no queda nada en 220. Lo que
+    // se comprueba es que el paso bajo de la rama lo retiene por debajo del
+    // siseo en vez de dejarlo escapar a 14 kHz (que es lo que pasaba sin el).
+    check ("placa: shimmer al 100 % no se escapa a siseo", full[6] < 0.05 && full[5] + full[6] < 0.4,
+           "al 100 %: " + dist (full));
+}
+
+/** Escalado de longitudes: la cola tiene que durar lo mismo a 44.1 y a 96 kHz. */
+void testPlateSampleRateInvariance()
+{
+    const double a = plateTail (44100.0, 0.8f, 0.3f, 0.5f, 0.0f, 12.0f, 3, true);
+    const double b = plateTail (96000.0, 0.8f, 0.3f, 0.5f, 0.0f, 12.0f, 3, true);
+    const double dB = 20.0 * std::log10 (a / b);
+    check ("placa: igual a 44.1 y 96 kHz", std::fabs (dB) < 1.5,
+           "nivel a los 3 s: 44.1k " + f (a, 5) + ", 96k " + f (b, 5) + " (" + f (dB, 2) + " dB)");
+}
+
+void testPlateNoNaN()
+{
+    PlateReverb rv;
+    rv.prepare (48000.0);
+    rv.setSize (1.0f); rv.setModulation (1.0f); rv.setShimmer (1.0f, 12.0f); rv.setPreDelayMs (200.0f);
+
+    bool bad = false;
+    for (int n = 0; n < 48000 * 2; ++n)
+    {
+        float l = n < 100 ? 1e6f : (n == 200 ? std::numeric_limits<float>::quiet_NaN() : (n % 1000 == 0 ? 1e-30f : 0.0f));
+        float r = l;
+        rv.process (l, r);
+        if (n > 300 && (! std::isfinite (l) || ! std::isfinite (r))) bad = true;
+    }
+    check ("placa: sin NaN/Inf con extremos y NaN inyectado", ! bad,
+           bad ? "salida no finita" : "entrada 1e6, 1e-30 y un NaN; salida finita");
 }
 
 //==============================================================================
@@ -897,6 +1274,19 @@ int main (int argc, char** argv)
     testDelayTimeAccuracy();
     testPingPong();
     testDelayModulation();
+
+    section ("SATURADOR Y FREEZE");
+    testSaturatorAliasing();
+    testFreezeRelease();
+    testLowCutSteep();
+
+    section ("REVERB");
+    testPlateStability();
+    testPlatePreDelay();
+    testPlateStereo();
+    testPlateShimmer();
+    testPlateSampleRateInvariance();
+    testPlateNoNaN();
 
     section ("AUXILIARES");
     testDucker();

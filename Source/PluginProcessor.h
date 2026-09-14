@@ -6,6 +6,7 @@
 #include "StereoDelay.h"
 #include "Ducker.h"
 #include "TapeMod.h"
+#include "PlateReverb.h"
 #include "PresetManager.h"
 #include "MidiControl.h"
 #include <atomic>
@@ -37,11 +38,13 @@ public:
     bool acceptsMidi() const override   { return true; }    // CC, PC y tap tempo
     bool producesMidi() const override  { return false; }
     bool isMidiEffect() const override  { return false; }
-    /** Con Freeze la cola es literalmente infinita; algunos hosts recortan el
-        render con este dato, asi que conviene decirselo. */
+    /** La placa con Size al maximo tiene un RT60 de ~17 s; 20 cubre eso y el
+        reverse con feedback al tope. Con Freeze la cola es literalmente
+        infinita; algunos hosts recortan el render con este dato, asi que
+        conviene decirselo. */
     double getTailLengthSeconds() const override
     {
-        return visFrozen.load() ? std::numeric_limits<double>::infinity() : 12.0;
+        return visFrozen.load() ? std::numeric_limits<double>::infinity() : 20.0;
     }
 
     int getNumPrograms() override;
@@ -98,7 +101,7 @@ private:
 
     std::vector<ReverseDelay> delays;      // un estado por canal
     StereoDelay               echo;
-    juce::Reverb              reverb;
+    PlateReverb               reverb;      // placa de Dattorro (ver PlateReverb.h)
     Ducker                    ducker;      // atenua el efecto
     Ducker                    driveEnv;    // empuja el drive del lazo
     TapeMod                   tape;        // wow y flutter, compartido por canales
@@ -110,6 +113,7 @@ private:
     // bypass la seca sube a 1 mientras la humeda mantiene su nivel para que la
     // cola se agote sin saltos.
     juce::SmoothedValue<float> drySmoothed, wetSmoothed;
+    juce::SmoothedValue<float> outSmoothed;    // trim de salida, lineal
 
     /** Suavizado a ritmo de bloque con constante de tiempo en SEGUNDOS, no en
         bloques: asi el resultado no depende del tamano de bloque del host. */
@@ -117,6 +121,7 @@ private:
 
     float revFbSm = 0.0f, echoFbSm = 0.0f;           // realimentaciones
     float revAmtSm = 0.0f, revSizeSm = 0.7f, revDampSm = 0.4f;   // reverb
+    float revModSm = 0.2f, revShimSm = 0.0f;
     bool  reverbActive = false;                       // para resetearlo al reactivarlo
     bool  bypassed     = false;                       // lo pone processBlockBypassed
 
@@ -150,11 +155,18 @@ private:
     std::atomic<float>* pRevSize  = nullptr;
     std::atomic<float>* pRevDamp  = nullptr;
     std::atomic<float>* pRevPost  = nullptr;
+    std::atomic<float>* pRevPre   = nullptr;
+    std::atomic<float>* pRevMod   = nullptr;
+    std::atomic<float>* pRevShim  = nullptr;
 
     std::atomic<float>* pMix      = nullptr;
     std::atomic<float>* pDuck     = nullptr;
     std::atomic<float>* pDuckRel  = nullptr;
     std::atomic<float>* pTempo    = nullptr;
+    std::atomic<float>* pHpSteep  = nullptr;
+    std::atomic<float>* pFreezeRel= nullptr;
+    std::atomic<float>* pParBal   = nullptr;
+    std::atomic<float>* pOutGain  = nullptr;
 
     float  dModPhase = 0.0f;      // LFO del chorus del delay
 

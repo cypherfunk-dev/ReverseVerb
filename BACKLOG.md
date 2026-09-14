@@ -1,57 +1,63 @@
 # Backlog — ReverseVerb
 
-Fuente única de verdad. Lo que estaba disperso entre el README, la conversación
-y este archivo, junto.
+Estado del proyecto y lo que queda. Lo técnico de cada cosa hecha está en
+[TECHNICAL.md](TECHNICAL.md); esto es solo la lista.
 
 ---
 
-## 0. Bloqueado ahora mismo
-
-| | Estado |
-|---|---|
-| **Suite de DSP** | ✅ Hecha. 12 comprobaciones en ~4 s (`tools\run_tests.bat`). Encontró un glide de 1 s en el arranque del delay que no se había detectado de oído. |
-| **pluginval** | ✅ **SUPERADA.** Primera ejecución: 19 secciones OK, 3 fallos en restauración de booleanos. Corregido con `SnappedBoolParameter` y revalidado en verde. |
-| **Cargar el VST3 en Ableton** | ✅ Compila y pluginval lo carga correctamente. Falta la prueba de oído en sesión real. |
-
----
-
-## 1. Acordado, listo para implementar
-
-Ver la evaluación técnica detallada más abajo.
-
-| # | Funcionalidad | Coste | Riesgo |
-|---|---|---|---|
-| ~~1~~ | ~~**Freeze / Drone**~~ | ✅ Hecho | Deriva medida: 0.000 dB tras 18 s |
-| ~~2~~ | ~~**Envelope Follower → Drive**~~ | ✅ Hecho | Por muestra, no por bloque |
-| ~~3~~ | ~~**Lecturas fraccionarias**~~ | ✅ Hecho | Transparente a rate=1, verificado bit a bit |
-| ~~4~~ | ~~**Wow & Flutter + micro-detune**~~ | ✅ Hecho | Destapó un bug de lectura adelantada |
-| ~~5~~ | ~~**Shimmer ±12 semitonos**~~ | ✅ Hecho | Barrido rehecho: el shimmer ESTABILIZA el lazo |
-
----
-
-## 2. Propuesto, sin decidir
-
-| Funcionalidad | Nota |
-|---|---|
-| **Anchura estéreo en el reverse** | Parcialmente cubierta por `Detune`, que desafina L y R en sentidos opuestos. Desfasar además los granos entre canales daría más anchura, pero ya no es la prioridad que era. |
-| ~~Modulación del delay~~ | ✅ Hecho. L y R en cuadratura. |
-| ~~Medidores de entrada/salida~~ | ✅ Hecho. Escala −48 a +6 dB. |
-| ~~Presets adicionales~~ | ✅ Hecho. 24 en total; los 6 nuevos usan tape, shimmer y drive dinámico. |
-| **Más presets** | Si vuelves a añadir: **siempre al final del array**, nunca en medio. |
-
----
-
-## 3. Deuda técnica
+## Hecho (septiembre 2026)
 
 | | Nota |
 |---|---|
-| **Tests de DSP como suite permanente** | Los barridos de estabilidad y de clicks se han escrito y tirado en cada iteración. Convertirlos en un `tests/` con un script que se pueda ejecutar de una vez evitaría que una refactorización futura rompa en silencio algo ya verificado. Relevante sobre todo antes de tocar el lazo de feedback. |
-| **Ondulación al mover `Length`** | Reenganche de 2–3 granos con leve modulación de amplitud. Inaudible en material normal, perceptible en un seno puro sostenido. |
-| **Sin build de macOS/Linux** | El código no usa nada específico de Windows, pero nunca se ha compilado fuera. Solo relevante si quieres distribuirlo. |
+| ✅ Suite de DSP permanente | 33 comprobaciones en ~10 s, `tools/run_tests.bat`. Sin JUCE. |
+| ✅ pluginval nivel 8 | Superado; `tools/run_pluginval.bat`. Encontró el bug de los booleanos. |
+| ✅ Freeze, Drive Env, lecturas fraccionarias, wow/flutter/detune, shimmer del reverse | Las cinco propuestas de la evaluación de abajo. |
+| ✅ Bloques de 0 muestras y bloques mayores que `samplesPerBlock` | Guard y troceado. |
+| ✅ Duck independiente del nivel de entrada | Envolvente relativa al pico reciente. |
+| ✅ Bypass con cola, suavizados independientes del tamaño de bloque, reset del reverb al reactivarlo | |
+| ✅ Combo de presets sincronizado con el host y marca "modificado" | |
+| ✅ Flush de NaN en los tres lazos, versión del estado, tail infinito con Freeze | |
+| ✅ Interpolación cúbica (Hermite) en todas las lecturas fraccionarias | 25× menos error entre muestras. |
+| ✅ Tempo manual cuando no hay host | En Standalone `Sync` estaba clavado a 120 sin avisar. |
+| ✅ CI en GitHub Actions | Windows / macOS universal / Linux; tests + pluginval; release en tags `v*`. |
+| ✅ MIDI | CC → cualquier parámetro (learn, momentáneo/toggle), Program Change → preset, tap tempo. |
+| ✅ Reverb de placa (Dattorro) con shimmer canónico | Sustituye a `juce::Reverb`. Pre-delay, Mod, Rev Shimmer. |
+| ✅ Ventana adaptada a la pantalla | Arranca escalada al área útil del monitor. |
+| ✅ Saturador con oversampling 2× | Alias del 9º armónico −32 dB. |
+| ✅ Low Cut de 12 dB, balance Rev/Dly en Paralelo, trim de salida | |
+| ✅ Freeze: release al soltar y sin click en la costura | El click existía desde siempre (0.4 con seno de 0.5). |
+| ✅ Tests a nivel de procesador | 17 comprobaciones; verifican MIDI y bypass de extremo a extremo. |
 
 ---
 
-# Evaluación técnica de las cuatro propuestas
+## Pendiente, por orden sugerido
+
+| # | Qué | Coste | Nota |
+|---|---|---|---|
+| 1 | **Probar de oído todo lo de septiembre** | — | Ver [TESTING.md](TESTING.md): es la lista completa de lo que hay que oír, medir y probar en un DAW real. |
+| 2 | **Reajustar presets con la placa** | Bajo | La cola dura más al mismo `Size`. Los "Ref:" y "Shoe:" son los más sensibles. Siempre editar en sitio, nunca reordenar. |
+| 3 | **Sidechain externo para el Duck** | Medio | Bus aux. Para mezcla, no para el guitarrista. |
+| 4 | **Ventana de grano precalculada** | Bajo | Solo si el CPU importa algún día. |
+| 5 | **Shimmer del reverb con su propio pitch** | Bajo | Hoy comparte `Shim Pitch` con el del reverse. Si alguien quiere +12 en uno y +7 en el otro, hace falta un parámetro más. |
+
+---
+
+## Deuda técnica
+
+| | Nota |
+|---|---|
+| **Ondulación al mover `Length`** | Reenganche de 2–3 granos con leve modulación de amplitud. Inaudible en material normal, perceptible en un seno puro sostenido. |
+| **Cambio de sample rate con Freeze activo** | El buffer se vacía y queda en silencio hasta soltar Freeze. No hay forma útil de conservarlo. |
+| **Builds de macOS/Linux** | Las hace el CI, pero no se han probado de oído. |
+
+---
+
+# Histórico: evaluación técnica de las cuatro propuestas (agosto 2026)
+
+Se conserva porque explica decisiones que siguen vigentes (por qué el shimmer
+del reverse tiene etapa propia, por qué un solo LFO para los dos granos).
+Todo lo que propone está hecho.
+
 
 ## Hallazgo 1: el motor de reverse ya *es* un pitch shifter granular
 

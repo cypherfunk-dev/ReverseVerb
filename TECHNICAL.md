@@ -1,7 +1,8 @@
 # ReverseVerb — documentación técnica
 
 Este archivo es para quien va a **compilar, testear o modificar** el plugin.
-Si solo quieres usarlo, lo que buscas está en el [README](README.md).
+Si solo quieres usarlo, lo que buscas está en el [README](README.md). Lo que
+falta por probar de oído y en un DAW está en [TESTING.md](TESTING.md).
 
 ---
 
@@ -20,11 +21,12 @@ Si solo quieres usarlo, lo que buscas está en el [README](README.md).
 11. [Tape: wow, flutter y detune](#tape-wow-flutter-y-detune)
 12. [Shimmer](#shimmer)
 13. [Delay estéreo](#delay-estéreo)
-14. [Configuración de buses](#configuración-de-buses)
-15. [Presets y estado](#presets-y-estado)
-16. [MIDI](#midi)
-17. [Interfaz y coste de CPU](#interfaz-y-coste-de-cpu)
-18. [Bugs encontrados y lecciones](#bugs-encontrados-y-lecciones)
+14. [Reverb de placa](#reverb-de-placa)
+15. [Configuración de buses](#configuración-de-buses)
+16. [Presets y estado](#presets-y-estado)
+17. [MIDI](#midi)
+18. [Interfaz y coste de CPU](#interfaz-y-coste-de-cpu)
+19. [Bugs encontrados y lecciones](#bugs-encontrados-y-lecciones)
 
 ---
 
@@ -122,7 +124,7 @@ compila y corre en segundos sin arrastrar el framework ni instanciar un host.
 Es lo que la hace barata de ejecutar, y una suite barata es una suite que se
 ejecuta.
 
-Comprobaciones (25): que no hay clicks en la costura de los granos, que la ventana
+Comprobaciones (36): que no hay clicks en la costura de los granos, que la ventana
 da potencia constante, que de verdad invierte (correlación cruzada contra la
 entrada invertida), que mover `Length` no produce saltos, que ambos lazos de
 realimentación decaen aunque se pida feedback al máximo, que el retardo es
@@ -132,7 +134,12 @@ vuelve, que el filtro da −3 dB en su corte, que la lectura fraccionaria a
 el clamp de modulación adelantada funciona en el caso extremo, que el ducking
 atenúa igual a −20 dBFS que a 0 dBFS, que un NaN inyectado no se queda en el
 lazo, que la interpolación cúbica es exacta en enteros y ≥5× mejor que la
-lineal entre ellos, y que nada produce NaN con entradas de 1e6 o 1e−30.
+lineal entre ellos, que el pitch shifter tiene ganancia unidad, que la placa
+decae siempre / respeta el pre-delay / sale decorrelada / apila octavas sin
+escaparse a siseo / suena igual a 44.1 y 96 kHz / no produce NaN, que el
+saturador a 2× rebaja los aliasing sin tocar la fundamental, que soltar
+Freeze no chasca y el release apaga en el tiempo pedido, que el Low Cut de
+12 dB aparta más graves, y que nada produce NaN con entradas de 1e6 o 1e−30.
 
 **Por qué existe:** los tres peores bugs del proyecto no se detectan de oído.
 
@@ -147,6 +154,27 @@ antes de tocar cualquier cosa del lazo de realimentación.**
 
 El script distingue "tests en rojo" (código de salida 1) de "el proceso murió"
 (cualquier otro código), lo que ahorra mucho tiempo de diagnóstico.
+
+### Tests a nivel de procesador
+
+```bat
+cmake --build build --config Release --target ReverseVerbHostTests
+build\ReverseVerbHostTests_artefacts\Release\ReverseVerbHostTests.exe
+```
+
+`tests/host_tests.cpp`. Consola con JUCE que instancia `ReverseVerbProcessor`
+de verdad (sin ventanas; `ScopedJuceInitialiser_GUI` para el
+`MessageManager`, que hace falta porque el MIDI se aplica por `AsyncUpdater`).
+Cubre el hueco entre la suite de DSP y pluginval: bloques de 0 / pequeños /
+mayores que `samplesPerBlock` y que un bloque grande suena igual que en
+trozos; bypass con cola y seca a 0 dB; estado de ida y vuelta con los 39
+parámetros; los 25 presets cargan, son idempotentes y suenan finito, y no
+tocan el tempo; MIDI de extremo a extremo (learn, momentáneo, toggle,
+continuo, program change, tap tempo a 500 ms → 119.7 BPM, mapeos en el
+estado); trim de salida exacto y neutro en bypass. 17 comprobaciones.
+
+`tools\run_tests.bat` corre las dos suites; el CI también (en Linux bajo
+`xvfb-run`, porque el inicializador de JUCE toca X11 aunque no abra nada).
 
 ### Validación del plugin con pluginval
 
@@ -218,16 +246,19 @@ cmake -B build -DASIO_SDK_DIR="C:/SDKs/asiosdk"
 Source/
   PluginProcessor.{h,cpp}   APVTS, parámetros, ruteo, bus layout
   PluginEditor.{h,cpp}      GUI: visualizador polar, knobs, medidores
-  PresetManager.{h,cpp}     24 presets de fábrica + presets de usuario en %APPDATA%
+  PresetManager.{h,cpp}     25 presets de fábrica + presets de usuario en %APPDATA%
   MidiControl.{h,cpp}       CC -> parámetro (learn), Program Change -> preset, tap tempo
   Interp.h                  Hermite de 4 puntos para lecturas fraccionarias
+  Saturator.h               tanh(d·x)/d con oversampling 2x, para el lazo del reverse
   ReverseDelay.h            motor de reverse (granular, 2 granos, lectura fraccionaria)
   StereoDelay.h             delay estéreo con ping-pong y modulación
+  PlateReverb.h             placa de Dattorro con shimmer en el tanque
   PitchShifter.h            shifter granular para el shimmer
   TapeMod.h                 LFOs de wow y flutter, en cents
   Ducker.h                  seguidor de envolvente (ducking + drive dinámico)
 tests/
-  dsp_tests.cpp             suite sin JUCE
+  dsp_tests.cpp             suite sin JUCE (36)
+  host_tests.cpp            procesador con JUCE, sin ventanas (17)
 tools/
   run_tests.bat, run_pluginval.bat
 ```
@@ -282,7 +313,7 @@ in ─► [mono→stereo dup] ─► Ducker (envolvente de la señal seca)
                           │       Rev→Delay:    reverse → delay
                           │       Paralelo:     0.7·reverse + 0.7·delay
                           │
-                          ├─► Reverb (post o pre, según `revpost`)
+                          ├─► PlateReverb (post o pre, según `revpost`)
                           ├─► ducking
                           └─► mix con la señal seca ─► out
 ```
@@ -437,6 +468,28 @@ Drive, Low Cut y High Cut actúan *dentro* del lazo, así que solo tocan las
 repeticiones, no el primer pase. Es lo que hace que la cola se oscurezca estilo
 cinta.
 
+### Oversampling del saturador
+
+`Saturator.h`. `tanh(8·x)` sobre 4 kHz genera armónicos hasta el 11º; a
+44.1 kHz el 9º (36 kHz) se pliega a 8.1 kHz y el 7º a 16.1 kHz, a −17..−21 dB
+de la fundamental, y vuelven a entrar al lazo. No se puede usar
+`juce::dsp::Oversampling` (trabaja por bloques y esto es un lazo por muestra),
+así que es un 2× manual: punto medio por Catmull-Rom, `tanh` en las dos
+muestras, y el mismo núcleo como half-band de bajada. Cuatro multiplicaciones
+extra por muestra y 3 muestras de retardo en el lazo.
+
+Medido (`testSaturatorAliasing`): alias del 9º de −32 a −64 dB, del 7º de −26
+a −39 dB, fundamental sin cambio (−0.01 dB). Los dos núcleos suman 1 y no
+superan la unidad, así que el techo de estabilidad no cambia (el barrido lo
+confirma).
+
+### Low Cut de 12 dB
+
+`hpsteep`: un segundo `OnePole` en cascada en el paso alto del lazo. Con el
+mix alto los graves se acumulan repetición tras repetición y 6 dB/oct no los
+apartaba: los presets shoegaze subían el corte a 150–250 Hz para compensar.
+Medido: −23 dB en 100 Hz en la cola con corte a 300 Hz.
+
 ---
 
 ## Drive dinámico
@@ -477,6 +530,30 @@ sobre el buffer congelado.
 
 Con Freeze activo, `Length` y `Feedback` se desactivan en la GUI porque el
 buffer ya no se escribe.
+
+### Soltar Freeze: costura y release
+
+**La costura.** Al soltar, lo que se escribe (`input + realimentación`) no es
+la continuación del material congelado, y un grano que arranque después y lea
+hacia atrás cruza esa costura con la ventana a plena ganancia. Medido con un
+seno de 0.5: saltos de 0.37–0.46 según la fase. Los primeros 10 ms se escriben
+en crossfade desde un **espejo** del material congelado (la muestra anterior a
+la costura, luego la anterior a esa…), que es continuo en la costura por
+construcción. Con eso: 0.02, la derivada natural del seno.
+
+Dos trampas al medirlo, documentadas para no repetirlas: con ruido blanco la
+diferencia entre muestras consecutivas es ruido (±1.2) y el click no se ve;
+y con 220 Hz y 1 s exacto de material la costura caía siempre en un cruce por
+cero (11 ciclos justos en 50 ms). El test usa 223 Hz y una duración no
+redonda.
+
+**El release** (`freezerel`, 0–2 s, default 400 ms). Al soltar, el lazo se
+realimenta con la ganancia *por vuelta* que hace que lo congelado caiga 60 dB
+en T: `10^(−3·L/T)`, constante durante el release. La primera versión usaba
+una envolvente que decaía, pero se aplica en cada vuelta y la caída resultaba
+cuadrática: en medio segundo no quedaba nada. Esa ganancia puede superar el
+techo de 0.60; es seguro porque es temporal y `tanh` acota. Medido: −11.7 dB a
+los 0.4 s con T = 1.5 s (la curva teórica da −16), −inf a los 3 s.
 
 ---
 
@@ -572,6 +649,10 @@ lazo del reverse. Funciona, pero suena distinto.
 La saturación del lazo es `tanh(f)` fija (ganancia máxima 1); a diferencia
 del reverse, no hay drive ajustable.
 
+**Balance en Paralelo** (`parbal`): `cos θ / sin θ` con θ = (bal+1)·π/4. En el
+centro 0.707 + 0.707, que era el 0.7 fijo de antes: dos señales
+decorrelacionadas suman en potencia.
+
 **Ping-Pong** cruza la realimentación entre canales. No afecta a la
 estabilidad: el viaje L→R→L tiene ganancia `fb²`, menos que el lazo directo.
 
@@ -605,6 +686,101 @@ al buffer y lo pone a 0 si no lo es. Un NaN que entre una sola vez —del host,
 de un filtro degenerado— se quedaría dando vueltas para siempre, y Freeze lo
 conservaría. Hay un test que inyecta un NaN y comprueba que un segundo después
 la salida es finita.
+
+---
+
+## Reverb de placa
+
+`PlateReverb.h`. Dattorro, *Effect Design Part 1* (JAES 1997). Sustituye a
+`juce::Reverb` (Freeverb), que sin modulación interna sonaba metálico en
+colas largas, no tenía pre-delay y no se podía abrir para meter un shifter.
+
+### Estructura
+
+`entrada → pre-delay → paso bajo (12 kHz) → 4 allpass de difusión → tanque`.
+El tanque es un "8": dos mitades que se realimentan cruzadas, cada una
+`allpass modulado → delay → damping → ×decay → [shimmer] → allpass → delay`.
+Las salidas L/R son sumas de 7 taps con signos alternos repartidos por las
+cuatro líneas y los dos allpass (los del paper): correlación L/R de la cola
+medida 0.017.
+
+Longitudes del paper (a 29 761 Hz) escaladas a la frecuencia de muestreo en
+`prepare()`, taps y excursión incluidos. Test: mismo nivel a los 3 s a 44.1 y
+96 kHz (1.2 dB con señal de banda limitada).
+
+### Estéreo
+
+El original suma L+R a mono. Aquí L entra en la mitad izquierda y R en la
+derecha: con entrada mono es idéntico; con Detune o ping-pong la cola conserva
+la anchura de la entrada.
+
+### Mapeos
+
+| Parámetro | Mapeo |
+|---|---|
+| `Size` | `decay = 0.25 + 0.65·size^1.6` → RT60 ≈ 1.3 s / 3.5 s / 17 s a 0 / 0.7 / 1 |
+| `Damp` | frecuencia de corte 20 kHz → 1 kHz (log), no coeficiente: igual a cualquier sr |
+| `Pre-Delay` | 0–200 ms, con glide de 60 ms (cambiarlo barre, no chasca) |
+| `Mod` | excursión de los allpass modulados, hasta 32 muestras @29.7k, dos LFOs a 0.93 / 1.07 Hz |
+| `Rev Shimmer` | mezcla del shifter en el tanque; `Shim Pitch` compartido con el reverse |
+
+### Shimmer canónico
+
+Un `PitchShifter` (60 ms de grano) por mitad, entre `×decay` y el segundo
+allpass. Su salida pasa por **cuatro polos a 5 kHz** antes de mezclarse.
+Medido con Goertzel por bandas de octava sobre la cola de un seno de 220 Hz,
+2 s después de cortar:
+
+| shimmer | 220 | 440 | 880 | 1.7k | 3.5k | 7k | 14k |
+|---|---|---|---|---|---|---|---|
+| 0 % | 100 % | | | | | | |
+| 50 % | 4 % | 10 % | 78 % | 7 % | 1 % | | |
+| 100 % | 1 % | 1 % | 1 % | 2 % | 61 % | 34 % | 0 % |
+
+Sin el filtro, al 100 % la cola acababa como siseo a 14 kHz; con un polo a
+7 kHz seguía en 12.7 kHz; con dos a 6 kHz se apilaba en la esquina (56 % en
+7 kHz). Cuatro polos a 5 kHz la dejan en 3–5 kHz. Al 100 % *toda* la energía
+sube cada vuelta (no queda nada en la fundamental); el sonido "acorde de
+octavas" está en 30–50 %.
+
+Nota importante para medir shifters granulares: el error de afinación (±20
+cents) a 880 Hz son ±12 Hz, y un Goertzel de 1 s (1 Hz de bin) no lo ve. Hay
+que integrar por banda (±7 %). El primer test con bin exacto decía que el 880
+no existía.
+
+### Nivel
+
+`kOutGain = 0.6 × 0.85`. El 0.6 es del paper; el 0.85 iguala la energía total
+con `juce::Reverb` al mismo porcentaje (medido con un burst de ruido en 9
+combinaciones de size/damp con un programa temporal que enlazaba JUCE; la
+placa salía un 10–20 % más fuerte). La cola queda ~1.5× más presente que en
+Freeverb al mismo Size: es una placa.
+
+### Estabilidad
+
+Barrido size {0.7, 1} × damp {0, 0.8} × mod {0, 1} × shimmer {0, 100 % ±12,
+50 % +7}: peor pico 30 s después de cortar la entrada, 0.0006 (−65 dB). Los
+allpass son de módulo 1, el damping ≤ 1 y decay ≤ 0.9, así que no puede
+autooscilar; el shimmer con crossfade de amplitud constante tampoco añade
+ganancia.
+
+### Integración
+
+La placa devuelve solo señal húmeda; el procesador mezcla
+`in·(1−amt) + placa·amt`. En mono se alimenta L=R y se promedia la salida.
+`Size`, `Damp`, `Mod` y `Shimmer` se suavizan a ritmo de bloque; el pre-delay
+lleva su propio glide. Sigue el reset al reactivar (`reverbActive`).
+
+Parámetros nuevos: `revpre`, `revmod` (default 20 %), `revshim`. Los proyectos
+guardados con Freeverb los cogen por defecto al cargar.
+
+### GUI
+
+SPACE pasó a tener fila propia (6 knobs) y OUTPUT se quedó con Mix/Duck/Duck
+Rel y los medidores en las tres columnas libres. El diseño mide 780×884 y la
+ventana **arranca escalada** al área útil de la pantalla principal (un
+portátil 1080p al 125 % tiene 816 px lógicos); la relación de aspecto es fija
+y el usuario puede redimensionar desde la esquina.
 
 ---
 

@@ -6,6 +6,7 @@
 
 #include "PitchShifter.h"
 #include "Interp.h"
+#include "Saturator.h"
 
 /** Filtro de un polo. Deliberadamente simple: dentro de un lazo de
     realimentacion un filtro de orden alto es facil que se vuelva inestable, y
@@ -117,6 +118,8 @@ public:
         setShimmer (0.0f, 12.0f);
         setFeedbackTone (20.0f, 20000.0f);
         setDrive (1.0f);
+        setLowCutSteep (false);
+        setFreezeRelease (0.0f);
         rate      = 1.0f;
         modOffset = 0.0f;
         reset();
@@ -128,10 +131,14 @@ public:
         writePos = 0;
         lastOut  = 0.0f;
         hpFilter.reset();
+        hpFilter2.reset();
         lpFilter.reset();
         shimmer.reset();
+        sat.reset();
 
         frozen = false;
+        releaseEnv = 0.0f;
+        fadeIn = kFadeLen;
         a = { 0,          0, length };
         b = { length / 2, 0, length };   // desfasado media ventana
     }
@@ -153,8 +160,61 @@ public:
             entra en juego. Es la forma SEGURA de tener sustain infinito.
           - Se puede seguir tocando encima. La senal seca no toca el buffer.
     */
-    void setFrozen (bool shouldFreeze) noexcept { frozen = shouldFreeze; }
-    bool isFrozen() const noexcept              { return frozen; }
+    void setFrozen (bool shouldFreeze) noexcept
+    {
+        if (frozen && ! shouldFreeze)
+        {
+            // Al SOLTAR. El buffer queda discontinuo donde lo nuevo se pega a
+            // lo congelado (lo escrito es input + realimentacion, no la
+            // continuacion del material viejo), y un grano que arranque
+            // despues y lea hacia atras cruza esa costura con la ventana a
+            // plena ganancia: chasca (medido con un seno de 0.5: saltos de
+            // 0.37-0.46 segun la fase; con el crossfade, 0.02). Los primeros
+            // milisegundos se escriben en crossfade desde un ESPEJO del
+            // material congelado (la muestra anterior a la costura, luego la
+            // anterior a esa...), que es continuo en la costura por
+            // construccion, hacia lo nuevo.
+            fadeIn  = 0;
+            seamPos = writePos;
+
+            // Y si hay release, el contenido congelado sigue dando vueltas
+            // con ganancia decreciente. Ver setFreezeRelease.
+            if (releaseSeconds > 0.0f)
+                releaseEnv = 1.0f;
+        }
+
+        frozen = shouldFreeze;
+    }
+    bool isFrozen() const noexcept { return frozen; }
+
+    /** FREEZE RELEASE. Congelar es limpio por construccion; soltar era
+        abrupto: al volver a escribir, los granos leen material nuevo y el
+        colchon desaparece en una ventana (L). Con release > 0, al soltar el
+        lazo se realimenta con la ganancia POR VUELTA que hace que lo
+        congelado caiga 60 dB en `seconds` (10^(-3 L/T)), mientras entra lo
+        nuevo: el colchon se apaga en vez de cortarse. Cuando lo congelado ya
+        esta por debajo de -60 dB vuelve a mandar el feedback del usuario.
+
+        Esa ganancia puede estar por encima del techo de 0.60 (con L corto y
+        T largo se acerca a 1). Es seguro porque es temporal: dura T y tanh
+        acota lo que pueda crecer mientras tanto. Lo comprueba la suite.
+
+        Se mantiene constante durante el release en vez de decaer: una
+        envolvente que decae se aplica en CADA vuelta y el resultado es una
+        caida cuadratica que en medio segundo ya no se oye (primera version). */
+    void setFreezeRelease (float seconds) noexcept
+    {
+        releaseSeconds = std::max (0.0f, seconds);
+        releaseCoef    = releaseSeconds > 0.001f
+                       ? std::exp (-6.9078f / (releaseSeconds * static_cast<float> (sampleRate)))
+                       : 0.0f;
+    }
+
+    /** true: dos polos en el paso alto del lazo (12 dB/oct) en vez de uno.
+        Con el mix alto los graves se acumulan repeticion tras repeticion y
+        6 dB/oct no los aparta del todo: los presets shoegaze subian el corte a
+        150-250 Hz para compensar. */
+    void setLowCutSteep (bool steep) noexcept { lowCutSteep = steep; }
 
     /** Se aplica en la costura de cada grano, no al instante. */
     void setLength (int newLengthSamples) noexcept
@@ -186,14 +246,16 @@ public:
 
     void setFeedbackTone (float highPassHz, float lowPassHz) noexcept
     {
-        hpFilter.setCutoff (highPassHz, sampleRate);
-        lpFilter.setCutoff (lowPassHz,  sampleRate);
+        hpFilter .setCutoff (highPassHz, sampleRate);
+        hpFilter2.setCutoff (highPassHz, sampleRate);
+        lpFilter .setCutoff (lowPassHz,  sampleRate);
     }
 
     /** drive >= 1. A mas drive, mas ganancia contra el techo de tanh. */
     void setDrive (float d) noexcept
     {
         drive = std::max (1.0f, d);
+        sat.setDrive (drive);
     }
 
     /** TECHO DURO DE REALIMENTACION. Valor obtenido midiendo, no estimando.
@@ -247,9 +309,24 @@ public:
     {
         if (! frozen)
         {
-            float fb = std::clamp (feedback, 0.0f, currentMaxFeedback()) * lastOut;
+            float fbAmt = std::clamp (feedback, 0.0f, currentMaxFeedback());
+
+            // Release del freeze: ganancia por vuelta que apaga lo congelado
+            // en releaseSeconds; releaseEnv solo lleva la cuenta de cuanto
+            // queda (-60 dB = fin).
+            if (releaseEnv > 1.0e-3f)
+            {
+                const float perPass = std::pow (10.0f, -3.0f * static_cast<float> (length)
+                                                      / (releaseSeconds * static_cast<float> (sampleRate)));
+                fbAmt = std::max (fbAmt, std::min (1.0f, perPass));
+                releaseEnv *= releaseCoef;
+            }
+
+            float fb = fbAmt * lastOut;
 
             fb = fb - hpFilter.lowpass (fb);   // paso alto = senal - paso bajo
+            if (lowCutSteep)
+                fb = fb - hpFilter2.lowpass (fb);
             fb = lpFilter.lowpass (fb);
 
             // El shifter va ANTES del saturador: asi el saturador sigue siendo
@@ -258,13 +335,23 @@ public:
             if (shimmerAmount > 0.0001f)
                 fb = fb + shimmerAmount * (shimmer.process (fb) - fb);
 
-            fb = std::tanh (drive * fb) / drive;   // ganancia maxima = 1 exacta
+            fb = sat.process (fb);   // tanh(d*x)/d a 2x: ganancia maxima = 1 exacta
 
             // Un NaN que entre una sola vez (del host, de un filtro) se
             // quedaria dando vueltas en el lazo para siempre, y Freeze lo
             // conservaria. Se corta aqui, en lo unico que se escribe al buffer.
             float w = input + fb;
             if (! std::isfinite (w)) w = 0.0f;
+
+            // Costura al soltar Freeze: ver setFrozen.
+            if (fadeIn < kFadeLen)
+            {
+                int mirror = seamPos - 1 - fadeIn;
+                if (mirror < 0) mirror += bufLen;
+                const float k = static_cast<float> (fadeIn++) / static_cast<float> (kFadeLen);
+                w = buffer[static_cast<size_t> (mirror)] * (1.0f - k) + w * k;
+            }
+
             buffer[static_cast<size_t> (writePos)] = w;
         }
 
@@ -357,10 +444,16 @@ private:
     Grain a { 0, 0, 0 };
     Grain b { 0, 0, 0 };
 
-    OnePole hpFilter, lpFilter;
+    OnePole hpFilter, hpFilter2, lpFilter;
+    bool    lowCutSteep = false;
     PitchShifter shimmer;
+    Saturator    sat;
     float shimmerAmount = 0.0f;
     float drive = 1.0f;
+    float releaseEnv = 0.0f, releaseCoef = 0.0f, releaseSeconds = 0.0f;
+
+    static constexpr int kFadeLen = 480;   // ~10 ms a 48k; en muestras para no depender de sr en caliente
+    int fadeIn = kFadeLen, seamPos = 0;
     float rate = 1.0f, modOffset = 0.0f;
     float lastOut = 0.0f;
     bool  frozen = false;

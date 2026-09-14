@@ -21,28 +21,40 @@ namespace lay
     // Tamano de diseno. Todo se posiciona en estas coordenadas y luego el
     // editor escala el contenedor entero, asi que crecer en alto no rompe nada:
     // la ventana es redimensionable con relacion de aspecto fija.
-    constexpr int W = 780, H = 840;
+    //
+    // Cinco secciones con fila de knobs (desde la placa de Dattorro SPACE tiene
+    // la suya). Para que quepa en un portatil 1080p al 125 % (816 px utiles)
+    // el layout es compacto y ademas la ventana ARRANCA escalada a la pantalla
+    // (ver el constructor): el tamano de diseno es el maximo comodo, no el
+    // minimo.
+    constexpr int W = 780, H = 884;
     constexpr int margin = 16;
     constexpr int cols   = 6;
 
-    constexpr int viewY = 54, viewH = 130;   // boca del agujero de gusano
+    constexpr int viewY = 48, viewH = 110;   // boca del agujero de gusano
 
-    constexpr int secRevY = 194;   // cabecera de seccion
-    constexpr int rowRevY = 216;   // etiqueta de los knobs
-    constexpr int ctlRevY = 326;
+    constexpr int rowH = 100;      // etiqueta + knob + caja de texto
+    constexpr int ctlH = 32;       // fila de botones/combos, con su hueco
 
-    constexpr int secDlyY = 360;
-    constexpr int rowDlyY = 382;
-    constexpr int ctlDlyY = 492;
+    constexpr int secRevY = 170;   // cabecera de seccion
+    constexpr int rowRevY = secRevY + 20;
+    constexpr int ctlRevY = rowRevY + rowH;
 
-    constexpr int secTapY = 526;   // TAPE no necesita fila de controles
-    constexpr int rowTapY = 548;
+    constexpr int secDlyY = ctlRevY + ctlH;
+    constexpr int rowDlyY = secDlyY + 20;
+    constexpr int ctlDlyY = rowDlyY + rowH;
 
-    constexpr int secOutY = 666;
-    constexpr int rowOutY = 688;
-    constexpr int ctlOutY = 798;
+    constexpr int secTapY = ctlDlyY + ctlH;   // TAPE no necesita fila de controles
+    constexpr int rowTapY = secTapY + 20;
 
-    constexpr int knobH = 90;
+    constexpr int secSpaceY = rowTapY + rowH + 4;   // SPACE: fila propia
+    constexpr int rowSpaceY = secSpaceY + 20;
+    constexpr int ctlSpaceY = rowSpaceY + rowH;      // boton "Reverb despues del reverse"
+
+    constexpr int secOutY = ctlSpaceY + ctlH;        // OUTPUT: tres knobs y los medidores al lado
+    constexpr int rowOutY = secOutY + 20;
+
+    constexpr int knobH = 82;
 
     inline int colW()      { return (W - 2 * margin) / cols; }
     inline int colX (int i){ return margin + i * colW(); }
@@ -314,7 +326,7 @@ void BackPanel::paint (juce::Graphics& g)
 
     g.setColour (col::violet);
     g.setFont (juce::FontOptions (11.0f));
-    g.drawText ("horizonte de sucesos", lay::margin, 32, 270, 16,
+    g.drawText ("horizonte de sucesos", lay::margin, 30, 270, 16,
                 juce::Justification::centredLeft);
 
     // Las cabeceras se quedan con nombres funcionales a proposito: la
@@ -345,13 +357,11 @@ void BackPanel::paint (juce::Graphics& g)
     header ("TAPE Y PITCH   (actuan sobre el motor de reverse)", lay::margin, lay::secTapY, 460);
     rule (lay::secTapY);
 
-    header ("SPACE",  lay::margin,   lay::secOutY, 200);
-    header ("OUTPUT", lay::colX (3), lay::secOutY, 200);
-    rule (lay::secOutY);
+    header ("SPACE   (placa; Shimmer usa el Shim Pitch de arriba)", lay::margin, lay::secSpaceY, 460);
+    rule (lay::secSpaceY);
 
-    g.setColour (col::violet.withAlpha (0.35f));
-    g.drawLine (static_cast<float> (lay::colX (3) - 8), static_cast<float> (lay::secOutY + 22),
-                static_cast<float> (lay::colX (3) - 8), static_cast<float> (lay::ctlOutY - 8), 1.0f);
+    header ("OUTPUT", lay::margin, lay::secOutY, 200);
+    rule (lay::secOutY);
 }
 
 //==============================================================================
@@ -390,11 +400,15 @@ ReverseVerbEditor::ReverseVerbEditor (ReverseVerbProcessor& p)
     addKnob (revAmt,  "revamt",   "Reverb");
     addKnob (revSize, "revsize",  "Size");
     addKnob (revDamp, "revdamp",  "Damp");
+    addKnob (revPre,  "revpre",   "Pre-Delay");
+    addKnob (revMod,  "revmod",   "Mod");
+    addKnob (revShim, "revshim",  "Shimmer");
     addKnob (mix,     "mix",      "Mix");
     addKnob (duck,    "duck",     "Duck");
     addKnob (duckRel, "duckrel",  "Duck Rel");
+    addKnob (outGain, "outgain",  "Output");
 
-    for (auto* c : { &syncButton, &dSyncButton, &pingButton, &postButton, &freezeButton })
+    for (auto* c : { &syncButton, &dSyncButton, &pingButton, &postButton, &freezeButton, &steepButton })
         content.addAndMakeVisible (c);
 
     for (auto* c : { &divisionBox, &dDivisionBox, &routingBox })
@@ -414,6 +428,23 @@ ReverseVerbEditor::ReverseVerbEditor (ReverseVerbProcessor& p)
     tempoLabel.setJustificationType (juce::Justification::centredRight);
     content.addAndMakeVisible (tempoLabel);
     tempoAtt = std::make_unique<SliderAtt> (proc.apvts, "tempo", tempoSlider);
+
+    auto bar = [this] (MidiSlider& sl, juce::Label& lb, const char* text, const char* suffix)
+    {
+        sl.setSliderStyle (juce::Slider::LinearBar);
+        sl.setTextValueSuffix (suffix);
+        sl.setNumDecimalPlacesToDisplay (0);
+        content.addAndMakeVisible (sl);
+        lb.setText (text, juce::dontSendNotification);
+        lb.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+        lb.setJustificationType (juce::Justification::centredRight);
+        content.addAndMakeVisible (lb);
+    };
+    bar (frzRelSlider, frzRelLabel, "Frz Rel", " ms");
+    bar (balSlider,    balLabel,    "Rev/Dly", " %");
+    frzRelAtt = std::make_unique<SliderAtt> (proc.apvts, "freezerel", frzRelSlider);
+    balAtt    = std::make_unique<SliderAtt> (proc.apvts, "parbal",    balSlider);
+    steepAtt  = std::make_unique<ButtonAtt> (proc.apvts, "hpsteep",   steepButton);
 
     syncAtt  = std::make_unique<ButtonAtt> (proc.apvts, "sync",     syncButton);
     dSyncAtt = std::make_unique<ButtonAtt> (proc.apvts, "dsync",    dSyncButton);
@@ -435,6 +466,9 @@ ReverseVerbEditor::ReverseVerbEditor (ReverseVerbProcessor& p)
     pingButton  .onRightClick = [this] { showMidiMenu ("pingpong"); };
     postButton  .onRightClick = [this] { showMidiMenu ("revpost"); };
     tempoSlider .onRightClick = [this] { showMidiMenu (MidiControl::kTapTempo); };
+    steepButton .onRightClick = [this] { showMidiMenu ("hpsteep"); };
+    frzRelSlider.onRightClick = [this] { showMidiMenu ("freezerel"); };
+    balSlider   .onRightClick = [this] { showMidiMenu ("parbal"); };
     routingBox .onChange = [this] { updateEnablement(); };
 
     updateEnablement();
@@ -480,7 +514,21 @@ ReverseVerbEditor::ReverseVerbEditor (ReverseVerbProcessor& p)
         c->setFixedAspectRatio (static_cast<double> (lay::W) / static_cast<double> (lay::H));
         c->setSizeLimits (lay::W * 7 / 10, lay::H * 7 / 10, lay::W * 8 / 5, lay::H * 8 / 5);
     }
-    setSize (lay::W, lay::H);
+    // Tamano inicial: el de diseno si cabe, y si no, escalado para que quepa
+    // en la pantalla principal con margen para la barra de titulo. La relacion
+    // de aspecto es fija, asi que con elegir bien el alto basta. Un portatil
+    // 1080p al 125 % tiene 816 px utiles: sin esto la parte de abajo quedaba
+    // fuera de la pantalla.
+    float fit = 1.0f;
+    if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+    {
+        const auto area = d->userArea;
+        fit = juce::jmin (1.0f,
+                          static_cast<float> (area.getHeight() - 64) / static_cast<float> (lay::H),
+                          static_cast<float> (area.getWidth()  - 32) / static_cast<float> (lay::W));
+        fit = juce::jmax (fit, 0.7f);   // el limite inferior del constrainer
+    }
+    setSize (juce::roundToInt (lay::W * fit), juce::roundToInt (lay::H * fit));
 }
 
 ReverseVerbEditor::~ReverseVerbEditor()
@@ -551,6 +599,11 @@ void ReverseVerbEditor::updateEnablement()
     const bool manualTempo = ! proc.visHostTempo.load();
     tempoSlider.setVisible (manualTempo);
     tempoLabel .setVisible (manualTempo);
+
+    // El balance solo existe en Paralelo.
+    const bool parallel = routingBox.getSelectedItemIndex() == ReverseVerbProcessor::routeParallel;
+    balSlider.setEnabled (parallel);
+    balLabel .setEnabled (parallel);
 }
 
 void ReverseVerbEditor::refreshPresetList (int idToSelect)
@@ -637,12 +690,17 @@ void ReverseVerbEditor::syncMidiLabels()
                      &wow, &flutter, &detune, &shimmer, &shimPitch,
                      &revAmt, &revSize, &revDamp, &mix, &duck, &duckRel })
         k->label.setText (k->baseText + midiSuffix (k->paramID), juce::dontSendNotification);
+    for (auto* k : { &revPre, &revMod, &revShim, &outGain })
+        k->label.setText (k->baseText + midiSuffix (k->paramID), juce::dontSendNotification);
 
     syncButton  .setButtonText ("Sync"   + midiSuffix ("sync"));
     freezeButton.setButtonText ("Freeze" + midiSuffix ("freeze"));
     dSyncButton .setButtonText ("Sync"   + midiSuffix ("dsync"));
     postButton  .setButtonText ("Reverb despues del reverse" + midiSuffix ("revpost"));
     tempoLabel  .setText ("Tempo" + midiSuffix (MidiControl::kTapTempo), juce::dontSendNotification);
+    steepButton .setButtonText ("LC 12 dB" + midiSuffix ("hpsteep"));
+    frzRelLabel .setText ("Frz Rel" + midiSuffix ("freezerel"), juce::dontSendNotification);
+    balLabel    .setText ("Rev/Dly" + midiSuffix ("parbal"),    juce::dontSendNotification);
     // pingButton lo pone updateEnablement, que ya le anade el sufijo.
 }
 
@@ -787,24 +845,34 @@ void ReverseVerbEditor::resized()
     Knob* rev[] = { &length, &revFb, &drive, &driveEnv, &revLow, &revHigh };
     Knob* dly[] = { &dTime, &dFb, &dLow, &dHigh, &dMod, &dModRate };
     Knob* tap[] = { &wow, &flutter, &detune, &shimmer, &shimPitch };
-    Knob* out[] = { &revAmt, &revSize, &revDamp, &mix, &duck, &duckRel };
+    Knob* spc[] = { &revAmt, &revSize, &revDamp, &revPre, &revMod, &revShim };
+    Knob* out[] = { &mix, &duck, &duckRel, &outGain };
 
     layoutRow (rev, 6, lay::rowRevY);
     layoutRow (dly, 6, lay::rowDlyY);
     layoutRow (tap, 5, lay::rowTapY);
-    layoutRow (out, 6, lay::rowOutY);
+    layoutRow (spc, 6, lay::rowSpaceY);
+    layoutRow (out, 4, lay::rowOutY);
 
     syncButton  .setBounds (lay::margin,       lay::ctlRevY,  70, 22);
     divisionBox .setBounds (lay::margin + 74,  lay::ctlRevY,  90, 22);
     freezeButton.setBounds (lay::margin + 178, lay::ctlRevY,  90, 22);
-    tempoLabel  .setBounds (lay::margin + 290, lay::ctlRevY,  48, 22);
-    tempoSlider .setBounds (lay::margin + 344, lay::ctlRevY, 120, 22);
+    tempoLabel  .setBounds (lay::margin + 286, lay::ctlRevY,  48, 22);
+    tempoSlider .setBounds (lay::margin + 338, lay::ctlRevY, 104, 22);
+    steepButton .setBounds (lay::margin + 452, lay::ctlRevY,  84, 22);
+    frzRelLabel .setBounds (lay::margin + 540, lay::ctlRevY,  52, 22);
+    frzRelSlider.setBounds (lay::margin + 596, lay::ctlRevY, 152, 22);
 
     routingBox  .setBounds (lay::margin,       lay::ctlDlyY, 180, 22);
     dSyncButton .setBounds (lay::margin + 194, lay::ctlDlyY,  70, 22);
     dDivisionBox.setBounds (lay::margin + 268, lay::ctlDlyY,  90, 22);
     pingButton  .setBounds (lay::margin + 372, lay::ctlDlyY, 110, 22);
+    balLabel    .setBounds (lay::margin + 486, lay::ctlDlyY,  56, 22);
+    balSlider   .setBounds (lay::margin + 548, lay::ctlDlyY, 200, 22);
 
-    postButton.setBounds (lay::margin, lay::ctlOutY, 280, 22);
-    meters->setBounds (320, lay::ctlOutY - 6, lay::W - 320 - lay::margin, 34);
+    postButton.setBounds (lay::margin, lay::ctlSpaceY, 280, 22);
+
+    // Medidores en las tres columnas libres de OUTPUT, a la altura de los knobs.
+    meters->setBounds (lay::colX (4) + 8, lay::rowOutY + 34,
+                       lay::W - lay::colX (4) - 8 - lay::margin, 40);
 }

@@ -1,15 +1,15 @@
 # ReverseVerb
 
-**Reverse delay + delay + reverb para guitarra y cualquier otra fuente.**
+**Reverse delay + delay + reverb de placa para guitarra y cualquier otra fuente.**
 Plugin VST3 para Windows, con versión Standalone para probarlo sin DAW.
 
 ![Imagen del VST](assets/1.png)
 
 Tocas una nota y, un instante después, la oyes crecer al revés: de la nada
 hasta el ataque. Ese *swell* invertido es la base. Encima puedes ponerle un
-delay rítmico, un reverb, textura de cinta (wow, flutter, desafinado), shimmer
-de octavas y un ducking que aparta la cola mientras estás tocando para que no
-te tape.
+delay rítmico, un reverb de placa con shimmer, textura de cinta (wow, flutter,
+desafinado), octavas apiladas y un ducking que aparta la cola mientras estás
+tocando para que no te tape.
 
 > Si vienes a **desarrollar** el plugin (compilar a fondo, tests, cómo funciona
 > el DSP por dentro), todo eso está en [TECHNICAL.md](TECHNICAL.md). Este
@@ -123,7 +123,9 @@ funcionales a propósito, para que los encuentres seis meses después.
 | **Drive** | Saturación de la cola. Solo afecta a las repeticiones, no a la primera pasada, así que la cola se va "ensuciando" poco a poco, como en una cinta. |
 | **Drive Env** | Hace que el Drive dependa de la fuerza con que tocas. A 0 el drive es fijo. Al subirlo, tocar suave deja la cola limpia y atacar fuerte la satura. |
 | **Low Cut / High Cut** | Filtros dentro de la cola. El Low Cut es especialmente útil: quita graves que se acumulan repetición tras repetición. |
+| **LC 12 dB** | Hace el Low Cut el doble de empinado. Para muros densos donde con el corte normal los graves siguen embarrando. |
 | **Freeze** | Congela lo que hay ahora mismo en el buffer y lo sostiene indefinidamente. Puedes seguir tocando encima sin que lo nuevo entre al congelado. Mientras está activo, Length y Feedback se desactivan. |
+| **Frz Rel** | Cuánto tarda en apagarse el colchón al soltar Freeze (0–2 s). A 0 desaparece en una ventana; a 400 ms (por defecto) se va con naturalidad; a 2 s queda como una cola. |
 
 ### DELAY — un delay estéreo normal, con su propio sitio en la cadena
 
@@ -135,6 +137,7 @@ funcionales a propósito, para que los encuentres seis meses después.
 | **Low Cut / High Cut** | Filtros propios del delay. |
 | **Ping-Pong** | Las repeticiones alternan izquierda y derecha. Solo funciona en pistas estéreo (en mono el botón se apaga). |
 | **Mod / Rate** | Chorus suave en las repeticiones. Abre la imagen estéreo. |
+| **Rev/Dly** | Solo en ruteo **Paralelo**: balance entre la rama del reverse y la del delay. En el centro suenan las dos a igual nivel. |
 
 | Ruteo | Cómo suena |
 |---|---|
@@ -150,15 +153,22 @@ funcionales a propósito, para que los encuentres seis meses después.
 | **Wow** | Deriva lenta de afinación. Es lo que hace que parezca un casete gastado. |
 | **Flutter** | Temblor rápido de afinación. Más sutil; quita la sensación de "digital perfecto". |
 | **Detune** | Desafina el canal izquierdo y el derecho en sentidos opuestos. Ensancha la imagen y da esa sensación mareadora de pared de sonido. |
-| **Shimmer** | Parte de la cola pasa por un cambio de octava en cada repetición, así que se van apilando octavas por encima. |
-| **Shim Pitch** | Cuántos semitonos sube (o baja) el shimmer, de −12 a +12. |
+| **Shimmer** | Parte de la cola *invertida* pasa por un cambio de octava en cada repetición, así que se van apilando octavas sobre el swell. (El reverb tiene su propio Shimmer, ver SPACE.) |
+| **Shim Pitch** | Cuántos semitonos sube (o baja) el shimmer, de −12 a +12. Lo comparten los dos shimmers. |
 
-### SPACE — el reverb
+### SPACE — el reverb de placa
 
 | Control | Qué hace |
 |---|---|
-| **Reverb / Size / Damp** | Cantidad, tamaño de sala y oscuridad. A 0 el reverb está apagado y no consume nada. |
+| **Reverb / Size / Damp** | Cantidad, duración de la cola y oscuridad. A 0 el reverb está apagado y no consume nada. Size al máximo da colas de ~17 s. |
+| **Pre-Delay** | Silencio entre la nota y el arranque del reverb (0–200 ms). Separa la nota de su cola; útil para que un swell largo no la empaste. |
+| **Mod** | Movimiento interno de la placa. Es lo que hace que una cola larga suene lisa en vez de metálica. Al 20 % (por defecto) no se oye como chorus; más arriba sí. |
+| **Shimmer** | Octavas *dentro* del reverb: cada vuelta de la cola sube (o baja) los semitonos de Shim Pitch. Es el shimmer clásico de pedal. Al 30–50 % se apilan varias octavas a la vez; al 100 % todo sube y la cola se vuelve aire. |
 | **Reverb Post** | **Encendido**: el reverb va después del reverse; es el swell clásico que crece hacia la nota. **Apagado**: el reverb entra al buffer y se invierte con él; da un carácter de "succión" más raro. |
+
+Hay **dos shimmers** y suenan distinto: el de TAPE apila octavas sobre el
+swell invertido (cada repetición del reverse sube); el de SPACE las apila
+sobre la cola del reverb. Se pueden usar a la vez.
 
 ### OUTPUT
 
@@ -167,12 +177,13 @@ funcionales a propósito, para que los encuentres seis meses después.
 | **Mix** | Balance entre señal directa y efecto. |
 | **Duck** | Baja el efecto mientras hay señal de entrada. Es lo que hace usable un reverse reverb en una mezcla densa: la cola crece en los huecos en vez de tapar la nota que la provoca. Se adapta al nivel de tu señal, así que no depende de la ganancia de entrada. |
 | **Duck Rel** | Con qué rapidez vuelve el efecto al dejar de tocar. Ajústalo al ritmo de la frase. |
+| **Output** | Volumen de salida en dB (−24 a +12). Para bajar el nivel sin tocar el Mix cuando el feedback y el shimmer se te van. En bypass no actúa. |
 
 ---
 
 ## Presets
 
-Vienen **24 de fábrica**, agrupados por intención. Aparecen tanto en el
+Vienen **25 de fábrica**, agrupados por intención. Aparecen tanto en el
 desplegable del plugin como en el menú de presets de tu DAW.
 
 | Grupo | Presets |
@@ -184,6 +195,7 @@ desplegable del plugin como en el menú de presets de tu DAW.
 | Referencias | Ref: Guthrie Wash · Ref: Bow & Swell · Ref: Greenwood Reverse · Ref: Dotted Edge |
 | Shoegaze | Shoe: Muro · Shoe: Souvlaki · Shoe: Nowhere |
 | Tape, shimmer y drive dinámico | Catedral (shimmer) · Octavas al pulso · Subterráneo · Cinta muerta · Dinámico (toca fuerte) · Drone (pulsa Freeze) |
+| Placa | Placa de cristal (shimmer dentro del reverb; el reverse es condimento) |
 
 Uno merece explicación: **Drone (pulsa Freeze)** no suena distinto de entrada.
 Está *preparado* para congelar: ventana larga, shimmer moderado, reverb grande.
@@ -344,6 +356,20 @@ Las asignaciones se guardan con el proyecto.
 
 ## Trucos y cosas que conviene saber
 
+**El Drive ya no alia.** El saturador del lazo trabaja al doble de frecuencia
+de muestreo por dentro. Con Drive alto sobre notas agudas antes aparecía un
+brillo sucio e inarmónico; ahora la saturación es limpia. No hay que tocar
+nada.
+
+**El reverb cambió de motor.** Desde esta versión es una placa (Dattorro) en
+vez del Freeverb de JUCE: colas más largas y lisas, pre-delay y shimmer
+propio. Los presets se calibraron para sonar al mismo volumen, pero la cola
+dura más al mismo `Size`; si un preset tuyo suena más largo de lo que
+recuerdas, baja Size un poco.
+
+**La ventana se adapta a la pantalla.** Arranca al tamaño que quepa en tu
+monitor y se puede redimensionar desde la esquina (mantiene la proporción).
+
 **Freeze es seguro; Feedback al máximo, no.** Freeze no es "feedback infinito":
 es congelar el buffer y dejar de escribir en él, así que el nivel ni sube ni
 baja. Para sustain infinito, usa Freeze.
@@ -410,3 +436,4 @@ por dentro y las decisiones de diseño que no son obvias:
 **[TECHNICAL.md](TECHNICAL.md)**.
 
 Lo pendiente y lo descartado: **[BACKLOG.md](BACKLOG.md)**.
+Lo que hay que oír, medir y probar en un DAW real: **[TESTING.md](TESTING.md)**.

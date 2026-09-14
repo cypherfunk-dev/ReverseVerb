@@ -33,12 +33,14 @@ jobs:
           - name: Windows
             os: windows-latest
             tests_exe: build/Release/ReverseVerbTests.exe
+            host_tests_exe: build/ReverseVerbHostTests_artefacts/Release/ReverseVerbHostTests.exe
             pluginval_zip: pluginval_Windows.zip
             pluginval_bin: pluginval/pluginval.exe
             cmake_extra: -A x64
           - name: macOS
             os: macos-latest
             tests_exe: build/ReverseVerbTests
+            host_tests_exe: build/ReverseVerbHostTests_artefacts/Release/ReverseVerbHostTests
             pluginval_zip: pluginval_macOS.zip
             pluginval_bin: pluginval/pluginval.app/Contents/MacOS/pluginval
             # Binario universal: Apple Silicon e Intel en el mismo .vst3
@@ -46,6 +48,7 @@ jobs:
           - name: Linux
             os: ubuntu-latest
             tests_exe: build/ReverseVerbTests
+            host_tests_exe: build/ReverseVerbHostTests_artefacts/Release/ReverseVerbHostTests
             pluginval_zip: pluginval_Linux.zip
             pluginval_bin: pluginval/pluginval
             cmake_extra: ''
@@ -79,11 +82,22 @@ jobs:
       - name: Compilar
         run: >
           cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
-          --target ReverseVerb_VST3 ReverseVerb_Standalone ReverseVerbTests
+          --target ReverseVerb_VST3 ReverseVerb_Standalone ReverseVerbTests ReverseVerbHostTests
 
       - name: Suite de DSP
         shell: bash
         run: ${{ matrix.tests_exe }}
+
+      # Instancia el procesador con JUCE (sin ventanas). En Linux necesita un
+      # display aunque no abra nada: ScopedJuceInitialiser_GUI toca X11.
+      - name: Tests de procesador
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            xvfb-run -a ${{ matrix.host_tests_exe }}
+          else
+            ${{ matrix.host_tests_exe }}
+          fi
 
       - name: Descargar pluginval
         shell: bash
