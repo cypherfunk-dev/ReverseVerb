@@ -92,6 +92,10 @@ Ableton que lo lea desde donde se ha compilado:
 En otros DAW el proceso es el mismo: añade esa carpeta a las rutas de VST3 y
 reescanea.
 
+**Pro Tools** necesita el formato AAX, que requiere el SDK de Avid y la firma
+de PACE; está preparado en la build pero aún no se distribuye. Ver
+[TECHNICAL.md](TECHNICAL.md#aax-pro-tools).
+
 Si prefieres tenerlo en la carpeta estándar, copia `ReverseVerb.vst3` a
 `C:\Program Files\Common Files\VST3` (te pedirá permisos de administrador).
 

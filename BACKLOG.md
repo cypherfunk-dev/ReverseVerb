@@ -49,6 +49,8 @@ Estado del proyecto y lo que queda. Lo técnico de cada cosa hecha está en
 |---|---|
 | **Ondulación al mover `Length`** | Reenganche de 2–3 granos con leve modulación de amplitud. Inaudible en material normal, perceptible en un seno puro sostenido. |
 | **Cambio de sample rate con Freeze activo** | El buffer se vacía y queda en silencio hasta soltar Freeze. No hay forma útil de conservarlo. |
+| **AAX (Pro Tools)** | Preparado en CMake (`AAX_SDK_DIR`). Faltan: registro en Avid, SDK, aprobación y firma PACE, probar en Pro Tools Developer. Ver TECHNICAL. |
+| **AU / CLAP / LV2** | Baratos de añadir (20 líneas de CMake); pendiente de decidir. |
 | **Builds de macOS/Linux** | Las hace el CI, pero no se han probado de oído. |
 
 ---

@@ -224,6 +224,55 @@ funcionar", no "funcionan".
 
 ---
 
+## Formatos de plugin
+
+| Formato | Estado | Nota |
+|---|---|---|
+| VST3 | ✅ | Windows/macOS/Linux, validado con pluginval en el CI. |
+| Standalone | ✅ | Con icono. |
+| AU | Se añade con `AU` en `FORMATS` | Solo compila en macOS (el job de CI existe). Con MIDI de entrada JUCE lo registra como *Music Effect*. |
+| CLAP | Se añade con [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions) | ~10 líneas de CMake vía FetchContent. Sin licencias. |
+| LV2 | Se añade con `LV2` + `LV2URI` | Nativo en JUCE; relevante en Linux. |
+| **AAX** (Pro Tools) | Preparado, opcional | Ver abajo. |
+| VST2 | ❌ | Steinberg no licencia el SDK desde 2018; no se puede distribuir. |
+| AUv3 | ❌ (no aporta) | Formato de iOS/App Store; en escritorio AU basta. |
+
+### AAX (Pro Tools)
+
+`CMakeLists.txt` añade el formato **solo si existe** `AAX_SDK_DIR`
+(`Interfaces/AAX.h`), igual que con ASIO; sin SDK no cambia nada. Con él:
+
+```bat
+cmake -B build -DAAX_SDK_DIR="C:/SDKs/aax-sdk"
+cmake --build build --config Release --target ReverseVerb_AAX
+```
+
+Categoría `Reverb Delay` (aparece en los dos menús de Pro Tools) e
+identificador `com.cypherfunk.reverseverb`, que **no debe cambiar nunca**:
+Pro Tools lo usa para reconocer el plugin en sesiones guardadas.
+
+Lo que hace falta y no es código:
+
+1. **SDK de Avid**: registro en developer.avid.com, aceptar la licencia,
+   descargar. La licencia prohíbe redistribuirlo: no va en el repo ni en el
+   CI público (si algún día se quiere en CI, repo privado + secreto).
+2. **Firma PACE**: Pro Tools (la versión normal) solo carga AAX firmados con
+   las herramientas de PACE (Eden / `wraptool`). Se obtienen con una cuenta de
+   desarrollador iLok y la aprobación de Avid como desarrollador AAX (días o
+   semanas). Desde hace unos años PACE las da sin coste a desarrolladores
+   aprobados. En macOS además hace falta Apple Developer para notarizar.
+3. **Probar sin firma**: la build **Pro Tools Developer** (portal de Avid)
+   carga AAX sin firmar. Es donde se desarrolla y se oye antes de tener la
+   firma.
+
+Lo que el wrapper AAX de JUCE ya cubre de lo nuestro: parámetros, estado,
+presets como programas, MIDI de entrada, bypass con cola, mono→estéreo. Lo que
+convendría añadir cuando exista la build: una *page table* para superficies de
+control (opcional) y una pasada de pluginval no aplica (no valida AAX); Avid
+tiene su propio `AAX Validator`.
+
+---
+
 ## ASIO
 
 JUCE no puede incluir el SDK de ASIO: es de Steinberg y su licencia no permite

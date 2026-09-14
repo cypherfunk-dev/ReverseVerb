@@ -16,6 +16,25 @@ FetchContent_Declare(JUCE
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(JUCE)
 
+# --- AAX (Pro Tools), opcional ----------------------------------------------
+# El SDK de Avid no se puede redistribuir (hay que registrarse en
+# developer.avid.com y aceptar su licencia), asi que no va en el repo ni en el
+# CI: se apunta aqui a la carpeta donde lo descomprimiste y el formato se
+# anade solo si existe. Ademas, Pro Tools (la version normal) SOLO carga AAX
+# firmados con las herramientas de PACE (Eden/wraptool), que Avid concede a
+# desarrolladores aprobados; sin firmar solo carga en la build "Pro Tools
+# Developer". Detalles en TECHNICAL.md.
+set(AAX_SDK_DIR "C:/SDKs/aax-sdk" CACHE PATH "Ruta al AAX SDK de Avid (opcional)")
+set(REVERSEVERB_FORMATS VST3 Standalone)
+
+if(EXISTS "${AAX_SDK_DIR}/Interfaces/AAX.h")
+    juce_set_aax_sdk_path("${AAX_SDK_DIR}")
+    list(APPEND REVERSEVERB_FORMATS AAX)
+    message(STATUS "ReverseVerb: AAX activado desde ${AAX_SDK_DIR}")
+else()
+    message(STATUS "ReverseVerb: sin AAX SDK - no se compila el formato AAX")
+endif()
+
 # --- Plugin -----------------------------------------------------------------
 juce_add_plugin(ReverseVerb
     COMPANY_NAME                "Carlos"
@@ -38,7 +57,12 @@ juce_add_plugin(ReverseVerb
     # .ico / .icns a partir del PNG. El VST3 no lleva icono en Windows.
     ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/assets/logo-mark.png"
     ICON_SMALL                  "${CMAKE_CURRENT_SOURCE_DIR}/assets/logo-mark.png"
-    FORMATS                     VST3 Standalone
+    FORMATS                     ${REVERSEVERB_FORMATS}
+    # Solo cuentan si AAX esta en FORMATS. Reverb + Delay para que Pro Tools
+    # lo liste en los dos menus; el identificador tiene que ser unico y no
+    # cambiar nunca (Pro Tools lo usa para reconocer el plugin en sesiones).
+    AAX_IDENTIFIER              com.cypherfunk.reverseverb
+    AAX_CATEGORY                Reverb Delay
     PRODUCT_NAME                "ReverseVerb")
 
 # El logo va incrustado en el binario: un plugin no puede depender de un PNG

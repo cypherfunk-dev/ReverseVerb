@@ -92,6 +92,10 @@ Ableton to read it from where it was built:
 
 In other DAWs it's the same: add that folder to the VST3 paths and rescan.
 
+**Pro Tools** needs the AAX format, which requires Avid's SDK and PACE
+signing; it's prepared in the build but not shipped yet. See
+[TECHNICAL.md](TECHNICAL.md#aax-pro-tools).
+
 If you'd rather have it in the standard folder, copy `ReverseVerb.vst3` to
 `C:\Program Files\Common Files\VST3` (it will ask for admin rights).
 
