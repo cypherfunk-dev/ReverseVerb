@@ -1,5 +1,7 @@
 # ReverseVerb
 
+*Español · [English](README.md)*
+
 **Reverse delay + delay + reverb de placa para guitarra y cualquier otra fuente.**
 Plugin VST3 para Windows, con versión Standalone para probarlo sin DAW.
 
@@ -32,6 +34,10 @@ tocando para que no te tape.
 ---
 
 ## Instalación
+
+**La interfaz habla tu idioma:** el plugin se muestra en español si el sistema
+está en español, y en inglés en cualquier otro caso. Los nombres de los
+controles (Length, Feedback, Drive…) son los mismos en los dos.
 
 **Si hay una versión publicada** en
 [Releases](https://github.com/cypherfunk-dev/ReverseVerb/releases), descarga
@@ -324,7 +330,7 @@ expresión**, y cambiar de preset con los botones de una pedalera.
 ### Asignar un control
 
 1. **Clic derecho** sobre el knob o botón → **MIDI Learn**. La etiqueta pasa a
-   decir `· learn...`.
+   decir `· aprendiendo...`.
 2. Mueve el control físico (pisa el pedal, gira el knob). Queda asignado y la
    etiqueta muestra `· CC 64` (o el número que sea).
 3. Para quitarlo: clic derecho → **Quitar CC n**.

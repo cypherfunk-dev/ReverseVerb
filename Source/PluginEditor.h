@@ -103,6 +103,36 @@ class BackPanel : public juce::Component
 {
 public:
     void paint (juce::Graphics&) override;
+    bool simple = false;   // cambia las cabeceras y el alto del fondo
+};
+
+//==============================================================================
+/** Lineas de resumen del modo Simple: lo que esta oculto sigue sonando, y
+    esto lo dice ("Tape · Wow 100 · Detune +12"). Solo lectura; un clic lleva
+    al modo Completo. Sin esto un modo simple engana: cargas "Cinta muerta",
+    ves ocho knobs normales y no entiendes por que suena a casete. */
+class SummaryStrip : public juce::Component
+{
+public:
+    struct Line { juce::String head; juce::Colour colour; juce::String body; };
+
+    void setLines (std::vector<Line> l)
+    {
+        bool same = l.size() == lines.size();
+        for (size_t i = 0; same && i < l.size(); ++i)
+            same = l[i].body == lines[i].body && l[i].head == lines[i].head;
+        if (same) return;
+        lines = std::move (l);
+        repaint();
+    }
+
+    std::function<void()> onClick;
+
+    void paint (juce::Graphics&) override;
+    void mouseUp (const juce::MouseEvent& e) override { if (onClick && ! e.mouseWasDraggedSinceMouseDown()) onClick(); }
+
+private:
+    std::vector<Line> lines;
 };
 
 //==============================================================================
@@ -112,6 +142,11 @@ class ReverseVerbEditor : public juce::AudioProcessorEditor,
 public:
     explicit ReverseVerbEditor (ReverseVerbProcessor&);
     ~ReverseVerbEditor() override;
+
+    /** Alto de diseno del modo actual. Las constantes son espejo de lay::H y
+        lay::HSimple del .cpp (hay un static_assert que lo vigila). */
+    static constexpr int lay_H = 884, lay_HSimple = 710;
+    int designHeight() const { return uiSimple ? lay_HSimple : lay_H; }
 
     void resized() override;
 
@@ -150,7 +185,24 @@ private:
     /** Refresca los sufijos MIDI de todos los knobs y botones. */
     void syncMidiLabels();
 
-    void timerCallback() override { updateEnablement(); syncPresetDisplay(); syncMidiLabels(); }
+    void timerCallback() override
+    {
+        updateEnablement();
+        syncPresetDisplay();
+        syncMidiLabels();
+        if (uiSimple) refreshSummary();
+    }
+
+    // --- modo Simple / Completo ---------------------------------------------
+    /** Preferencia de interfaz, no de sonido: no va en el estado del proyecto
+        ni se automatiza. Se recuerda globalmente (ultima eleccion). Conmutar
+        no toca ningun parametro; lo oculto sigue actuando. */
+    void setUiMode (bool simple, bool save);
+    void refreshSummary();
+    /** Escala <= 1 para que el alto del modo actual quepa en la pantalla principal. */
+    float fitForDisplay() const;
+    bool uiSimple = true;
+    std::unique_ptr<juce::PropertiesFile> uiPrefs;
 
     void refreshPresetList (int idToSelect = 0);
     void stepPreset (int delta);
@@ -173,7 +225,7 @@ private:
     MidiToggle freezeButton { "Freeze" };
     MidiToggle dSyncButton  { "Sync" };
     MidiToggle pingButton   { "Ping-Pong" };
-    MidiToggle postButton   { "Reverb despues del reverse" };
+    MidiToggle postButton   { TRANS ("Reverb after the reverse") };
     MidiToggle steepButton  { "LC 12 dB" };
 
     // Barras (como Tempo) para lo que no cabe como knob: release del Freeze
@@ -191,9 +243,12 @@ private:
     juce::Label  tempoLabel;
     std::unique_ptr<SliderAtt> tempoAtt;
 
+    juce::TextButton simpleBtn { TRANS ("Simple") }, fullBtn { TRANS ("Full") };
+    SummaryStrip     summary;
+
     juce::ComboBox   presetBox;
     juce::TextButton prevBtn { "<" }, nextBtn { ">" },
-                     saveBtn { "Guardar" }, delBtn { "Borrar" };
+                     saveBtn { TRANS ("Save") }, delBtn { TRANS ("Delete") };
     std::unique_ptr<juce::AlertWindow> dialog;
 
     // Los presets de usuario empiezan en este id para no chocar con los de

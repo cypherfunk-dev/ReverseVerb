@@ -27,6 +27,7 @@ Estado del proyecto y lo que queda. Lo técnico de cada cosa hecha está en
 | ✅ Low Cut de 12 dB, balance Rev/Dly en Paralelo, trim de salida | |
 | ✅ Freeze: release al soltar y sin click en la costura | El click existía desde siempre (0.4 con seno de 0.5). |
 | ✅ Tests a nivel de procesador | 17 comprobaciones; verifican MIDI y bypass de extremo a extremo. |
+| ✅ Modos Simple / Completo | Ocho knobs grandes + tira de resumen de lo oculto. Preferencia global. |
 
 ---
 

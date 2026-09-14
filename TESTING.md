@@ -265,6 +265,17 @@ Los 25 cargan y son idempotentes (test). Lo que falta es oírlos con la placa.
 
 ## 7. Interfaz
 
+- [ ] **Modos Simple / Completo:** abre en Simple la primera vez. Conmuta
+  varias veces con audio sonando: sin cortes, sin click, el sonido no cambia.
+  La ventana cambia de alto y cabe en la pantalla en los dos modos. Cierra y
+  reabre el plugin (y el DAW): recuerda el último modo.
+- [ ] **Tira de resumen:** carga *Cinta muerta* en Simple: la línea Tape dice
+  Wow y Flutter. Cambia un knob oculto desde Completo, vuelve a Simple: la
+  línea lo refleja en < 1 s. Con todo por defecto dice "por defecto". Clic en
+  la tira → Completo.
+- [ ] **Los ocho de Simple son los correctos:** tras una semana de uso, ¿hay
+  alguno que nunca tocas ahí, o alguno que echas de menos? (Candidatos:
+  `Detune` en vez de `Shimmer`; el ruteo del delay sobra si nunca lo usas.)
 - [ ] **Tamaño al abrir:** en tu pantalla (1536×864 lógicos) la ventana cabe
   entera al abrir, en el Standalone y en Ableton. Se puede agrandar desde la
   esquina hasta el límite de la pantalla.
@@ -392,3 +403,4 @@ Las **decisiones a tomar** que salen de este documento, para no perderlas:
 4. Presets shoegaze con `LC 12 dB` y corte más bajo.
 5. Reajuste de `Size` en los presets sensibles.
 6. Suelo del Duck (−26 dBFS) según tu cadena.
+7. Los ocho controles del modo Simple.

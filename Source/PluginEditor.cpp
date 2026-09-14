@@ -56,6 +56,23 @@ namespace lay
 
     constexpr int knobH = 82;
 
+    // --- modo Simple: ocho knobs grandes en dos filas de cuatro ---------------
+    // Fila 1: Length, Feedback, Drive | Mix.  Fila 2: Reverb, Size, Shimmer | Duck.
+    // Las tres primeras columnas son REVERSE / SPACE; la cuarta es OUTPUT en
+    // las dos filas. Debajo, la fila de Sync/Freeze/ruteo/tempo y las lineas
+    // de resumen de lo que esta oculto.
+    // Knobs de 140x146: el circulo queda en ~120 px (el doble que en
+    // Completo). Es la jerarquia: estos ocho SON el plugin.
+    constexpr int sSec1Y  = 162, sRow1Y = 180;
+    constexpr int sSec2Y  = 366, sRow2Y = 384;
+    constexpr int sKnobH  = 146;
+    constexpr int sCtlY   = 576;
+    constexpr int sSumY   = 622;
+    constexpr int HSimple = 710;
+
+    inline int colW4()       { return (W - 2 * margin) / 4; }
+    inline int colX4 (int i) { return margin + i * colW4(); }
+
     inline int colW()      { return (W - 2 * margin) / cols; }
     inline int colX (int i){ return margin + i * colW(); }
 }
@@ -316,7 +333,7 @@ void BackPanel::paint (juce::Graphics& g)
     // Gradiente radial centrado en la boca del tunel. Es estatico: este
     // componente solo repinta al redimensionar, no en cada frame.
     juce::ColourGradient bg (col::deep,  lay::W * 0.5f, static_cast<float> (lay::viewY + lay::viewH / 2),
-                             col::space, lay::W * 0.5f, lay::H * 1.15f, true);
+                             col::space, lay::W * 0.5f, static_cast<float> (getHeight()) * 1.15f, true);
     g.setGradientFill (bg);
     g.fillAll();
 
@@ -326,13 +343,13 @@ void BackPanel::paint (juce::Graphics& g)
 
     g.setColour (col::violet);
     g.setFont (juce::FontOptions (11.0f));
-    g.drawText ("horizonte de sucesos", lay::margin, 30, 270, 16,
+    g.drawText (TRANS ("event horizon"), lay::margin, 30, 270, 16,
                 juce::Justification::centredLeft);
 
     // Las cabeceras se quedan con nombres funcionales a proposito: la
     // ambientacion va en los graficos, no en renombrar controles que luego no
     // sabrias buscar.
-    auto header = [&] (const char* name, int x, int y, int w)
+    auto header = [&] (const juce::String& name, int x, int y, int w)
     {
         g.setColour (col::cyan.withAlpha (0.85f));
         g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
@@ -348,20 +365,61 @@ void BackPanel::paint (juce::Graphics& g)
         g.fillRect (lay::margin, y + 16, lay::W - 2 * lay::margin, 1);
     };
 
-    header ("REVERSE   (drive y filtros actuan dentro de su lazo)", lay::margin, lay::secRevY, 520);
+    if (simple)
+    {
+        header ("REVERSE", lay::margin,      lay::sSec1Y, 200);
+        header ("OUTPUT",  lay::colX4 (3),   lay::sSec1Y, 160);
+        rule (lay::sSec1Y);
+        header ("SPACE",   lay::margin,      lay::sSec2Y, 200);
+        rule (lay::sSec2Y);
+
+        // Separador entre las tres columnas de seccion y la de OUTPUT.
+        g.setColour (col::violet.withAlpha (0.25f));
+        g.fillRect (lay::colX4 (3) - 6, lay::sSec1Y + 18, 1, lay::sCtlY - lay::sSec1Y - 26);
+
+        // Titulo de las lineas de resumen.
+        g.setColour (col::dim);
+        g.setFont (juce::FontOptions (10.0f));
+        g.drawText (TRANS ("What you don't see is still playing. Click to see it all."),
+                    lay::margin, lay::sSumY - 14, 400, 12, juce::Justification::centredLeft);
+        return;
+    }
+
+    header (TRANS ("REVERSE   (drive and filters act inside its loop)"), lay::margin, lay::secRevY, 520);
     rule (lay::secRevY);
 
     header ("DELAY", lay::margin, lay::secDlyY, 300);
     rule (lay::secDlyY);
 
-    header ("TAPE Y PITCH   (actuan sobre el motor de reverse)", lay::margin, lay::secTapY, 460);
+    header (TRANS ("TAPE & PITCH   (act on the reverse engine)"), lay::margin, lay::secTapY, 460);
     rule (lay::secTapY);
 
-    header ("SPACE   (placa; Shimmer usa el Shim Pitch de arriba)", lay::margin, lay::secSpaceY, 460);
+    header (TRANS ("SPACE   (plate; Shimmer uses the Shim Pitch above)"), lay::margin, lay::secSpaceY, 460);
     rule (lay::secSpaceY);
 
     header ("OUTPUT", lay::margin, lay::secOutY, 200);
     rule (lay::secOutY);
+}
+
+static_assert (lay::H == ReverseVerbEditor::lay_H && lay::HSimple == ReverseVerbEditor::lay_HSimple,
+               "las constantes espejo del header tienen que coincidir con lay::");
+
+//==============================================================================
+void SummaryStrip::paint (juce::Graphics& g)
+{
+    const int lineH = 16;
+    int y = 0;
+    for (const auto& l : lines)
+    {
+        g.setColour (l.colour);
+        g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+        g.drawText (l.head, 0, y, 52, lineH, juce::Justification::centredLeft);
+
+        g.setColour (col::dim);
+        g.setFont (juce::FontOptions (11.0f));
+        g.drawText (l.body, 56, y, getWidth() - 56, lineH, juce::Justification::centredLeft, true);
+        y += lineH;
+    }
 }
 
 //==============================================================================
@@ -416,7 +474,11 @@ ReverseVerbEditor::ReverseVerbEditor (ReverseVerbProcessor& p)
 
     divisionBox .addItemList (ReverseVerbProcessor::divisionNames(), 1);
     dDivisionBox.addItemList (ReverseVerbProcessor::divisionNames(), 1);
-    routingBox  .addItemList (ReverseVerbProcessor::routingNames(),  1);
+    {
+        juce::StringArray routing;
+        for (const auto& n : ReverseVerbProcessor::routingNames()) routing.add (TRANS (n));
+        routingBox.addItemList (routing, 1);
+    }
 
     // --- tempo manual ---
     tempoSlider.setSliderStyle (juce::Slider::LinearBar);
@@ -481,6 +543,38 @@ ReverseVerbEditor::ReverseVerbEditor (ReverseVerbProcessor& p)
     content.addAndMakeVisible (presetBox);
     presetBox.setTextWhenNothingSelected (proc.getPresets().currentName);
 
+    // --- Simple / Completo -------------------------------------------------
+    for (auto* b : { &simpleBtn, &fullBtn })
+    {
+        b->setClickingTogglesState (true);
+        b->setRadioGroupId (0x5150);
+        b->setColour (juce::TextButton::buttonOnColourId, col::cyan);
+        b->setColour (juce::TextButton::textColourOnId,   col::space);
+        b->setColour (juce::TextButton::buttonColourId,   col::panel);
+        b->setColour (juce::TextButton::textColourOffId,  col::dim);
+        content.addAndMakeVisible (b);
+    }
+    simpleBtn.setConnectedEdges (juce::Button::ConnectedOnRight);
+    fullBtn  .setConnectedEdges (juce::Button::ConnectedOnLeft);
+    simpleBtn.onClick = [this] { if (simpleBtn.getToggleState()) setUiMode (true,  true); };
+    fullBtn  .onClick = [this] { if (fullBtn  .getToggleState()) setUiMode (false, true); };
+
+    summary.onClick = [this] { setUiMode (false, true); };
+    summary.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    content.addAndMakeVisible (summary);
+
+    // Preferencia global de interfaz (no va en el proyecto). Archivo propio
+    // para no chocar con el .settings del Standalone.
+    {
+        juce::PropertiesFile::Options o;
+        o.applicationName     = "ReverseVerb";
+        o.filenameSuffix      = "ui";
+        o.folderName          = "ReverseVerb";
+        o.osxLibrarySubFolder = "Application Support";
+        o.storageFormat       = juce::PropertiesFile::storeAsXML;
+        uiPrefs = std::make_unique<juce::PropertiesFile> (o);
+    }
+
     presetBox.onChange = [this]
     {
         const int id = presetBox.getSelectedId();
@@ -509,26 +603,14 @@ ReverseVerbEditor::ReverseVerbEditor (ReverseVerbProcessor& p)
     refreshPresetList();
 
     setResizable (true, true);
-    if (auto* c = getConstrainer())
-    {
-        c->setFixedAspectRatio (static_cast<double> (lay::W) / static_cast<double> (lay::H));
-        c->setSizeLimits (lay::W * 7 / 10, lay::H * 7 / 10, lay::W * 8 / 5, lay::H * 8 / 5);
-    }
+    setUiMode (uiPrefs->getValue ("uiMode", "simple") != "full", false);
     // Tamano inicial: el de diseno si cabe, y si no, escalado para que quepa
     // en la pantalla principal con margen para la barra de titulo. La relacion
     // de aspecto es fija, asi que con elegir bien el alto basta. Un portatil
     // 1080p al 125 % tiene 816 px utiles: sin esto la parte de abajo quedaba
     // fuera de la pantalla.
-    float fit = 1.0f;
-    if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
-    {
-        const auto area = d->userArea;
-        fit = juce::jmin (1.0f,
-                          static_cast<float> (area.getHeight() - 64) / static_cast<float> (lay::H),
-                          static_cast<float> (area.getWidth()  - 32) / static_cast<float> (lay::W));
-        fit = juce::jmax (fit, 0.7f);   // el limite inferior del constrainer
-    }
-    setSize (juce::roundToInt (lay::W * fit), juce::roundToInt (lay::H * fit));
+    const float fit = fitForDisplay();
+    setSize (juce::roundToInt (lay::W * fit), juce::roundToInt (designHeight() * fit));
 }
 
 ReverseVerbEditor::~ReverseVerbEditor()
@@ -592,7 +674,7 @@ void ReverseVerbEditor::updateEnablement()
     // pensando que el efecto esta roto.
     const bool stereo = proc.visStereo.load();
     pingButton.setEnabled (on && stereo);
-    pingButton.setButtonText ((stereo ? "Ping-Pong" : "Ping-Pong (mono)") + midiSuffix ("pingpong"));
+    pingButton.setButtonText ((stereo ? juce::String ("Ping-Pong") : TRANS ("Ping-Pong (mono)")) + midiSuffix ("pingpong"));
 
     // Con host, el BPM lo pone el; el control manual desaparece para no
     // sugerir que se puede cambiar algo que no se puede.
@@ -610,7 +692,7 @@ void ReverseVerbEditor::refreshPresetList (int idToSelect)
 {
     presetBox.clear (juce::dontSendNotification);
 
-    presetBox.addSectionHeading ("Fabrica");
+    presetBox.addSectionHeading (TRANS ("Factory"));
     for (int i = 0; i < PresetManager::getNumFactoryPresets(); ++i)
         presetBox.addItem (PresetManager::getFactoryPresetName (i), i + 1);
 
@@ -619,7 +701,7 @@ void ReverseVerbEditor::refreshPresetList (int idToSelect)
     if (! users.isEmpty())
     {
         presetBox.addSeparator();
-        presetBox.addSectionHeading ("Tuyos");
+        presetBox.addSectionHeading (TRANS ("Yours"));
 
         for (int i = 0; i < users.size(); ++i)
             presetBox.addItem (users[i], userIdBase + i);
@@ -676,7 +758,7 @@ juce::String ReverseVerbEditor::midiSuffix (const juce::String& target) const
 {
     auto& midi = proc.getMidi();
     if (midi.isLearning (target))
-        return juce::CharPointer_UTF8 (" \xc2\xb7 learn...");
+        return TRANS (juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 learning...")));
 
     const int cc = midi.ccFor (target);
     return cc >= 0 ? juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 CC ")) + juce::String (cc)
@@ -696,7 +778,7 @@ void ReverseVerbEditor::syncMidiLabels()
     syncButton  .setButtonText ("Sync"   + midiSuffix ("sync"));
     freezeButton.setButtonText ("Freeze" + midiSuffix ("freeze"));
     dSyncButton .setButtonText ("Sync"   + midiSuffix ("dsync"));
-    postButton  .setButtonText ("Reverb despues del reverse" + midiSuffix ("revpost"));
+    postButton  .setButtonText (TRANS ("Reverb after the reverse") + midiSuffix ("revpost"));
     tempoLabel  .setText ("Tempo" + midiSuffix (MidiControl::kTapTempo), juce::dontSendNotification);
     steepButton .setButtonText ("LC 12 dB" + midiSuffix ("hpsteep"));
     frzRelLabel .setText ("Frz Rel" + midiSuffix ("freezerel"), juce::dontSendNotification);
@@ -720,19 +802,19 @@ void ReverseVerbEditor::showMidiMenu (const juce::String& target)
 
     juce::PopupMenu m;
     if (learning)
-        m.addItem (cancel, "Cancelar MIDI Learn");
+        m.addItem (cancel, TRANS ("Cancel MIDI Learn"));
     else
-        m.addItem (learn, isTap ? "MIDI Learn (tap tempo)" : "MIDI Learn");
+        m.addItem (learn, isTap ? TRANS ("MIDI Learn (tap tempo)") : TRANS ("MIDI Learn"));
 
     if (cc >= 0)
-        m.addItem (remove, "Quitar CC " + juce::String (cc));
+        m.addItem (remove, TRANS ("Remove CC ") + juce::String (cc));
 
     if (isBool && cc >= 0)
     {
         const auto mode = midi.modeFor (target);
         m.addSeparator();
-        m.addItem (momentary, "Momentaneo (pisar = on)", true, mode == MidiControl::Mode::momentary);
-        m.addItem (toggle,    "Toggle (cada pulsacion invierte)", true, mode == MidiControl::Mode::toggle);
+        m.addItem (momentary, TRANS ("Momentary (press = on)"),      true, mode == MidiControl::Mode::momentary);
+        m.addItem (toggle,    TRANS ("Toggle (each press flips it)"), true, mode == MidiControl::Mode::toggle);
     }
 
     m.showMenuAsync (juce::PopupMenu::Options(),   // en la posicion del raton
@@ -751,6 +833,158 @@ void ReverseVerbEditor::showMidiMenu (const juce::String& target)
         syncMidiLabels();
         updateEnablement();
     });
+}
+
+float ReverseVerbEditor::fitForDisplay() const
+{
+    float fit = 1.0f;
+    if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+    {
+        const auto area = d->userArea;
+        fit = juce::jmin (1.0f,
+                          static_cast<float> (area.getHeight() - 64) / static_cast<float> (designHeight()),
+                          static_cast<float> (area.getWidth()  - 32) / static_cast<float> (lay::W));
+        fit = juce::jmax (fit, 0.7f);   // el limite inferior del constrainer
+    }
+    return fit;
+}
+
+//==============================================================================
+void ReverseVerbEditor::setUiMode (bool simple, bool save)
+{
+    uiSimple = simple;
+    content.simple = simple;
+    simpleBtn.setToggleState (simple,   juce::dontSendNotification);
+    fullBtn  .setToggleState (! simple, juce::dontSendNotification);
+
+    // Los ocho de Simple. El resto solo en Completo.
+    Knob* hero[] = { &length, &revFb, &drive, &mix, &revAmt, &revSize, &revShim, &duck };
+    Knob* all[]  = { &length, &revFb, &drive, &driveEnv, &revLow, &revHigh,
+                     &dTime, &dFb, &dLow, &dHigh, &dMod, &dModRate,
+                     &wow, &flutter, &detune, &shimmer, &shimPitch,
+                     &revAmt, &revSize, &revDamp, &revPre, &revMod, &revShim,
+                     &mix, &duck, &duckRel, &outGain };
+    for (auto* k : all)
+    {
+        const bool isHero = std::find (std::begin (hero), std::end (hero), k) != std::end (hero);
+        const bool show   = ! simple || isHero;
+        k->slider.setVisible (show);
+        k->label .setVisible (show);
+        // Solo la etiqueta cambia de tamano. Reaplicar setTextBoxStyle
+        // recrea la caja de texto y pierde su estilo: se deja como esta.
+        k->label.setFont (juce::FontOptions (simple && isHero ? 14.0f : 12.0f, juce::Font::bold));
+    }
+
+    for (auto* c : std::initializer_list<juce::Component*> {
+             &postButton, &steepButton, &frzRelSlider, &frzRelLabel,
+             &balSlider, &balLabel, &dSyncButton, &dDivisionBox, &pingButton })
+        c->setVisible (! simple);
+
+    summary.setVisible (simple);
+
+    if (auto* c = getConstrainer())
+    {
+        const int H = designHeight();
+        c->setFixedAspectRatio (static_cast<double> (lay::W) / static_cast<double> (H));
+        c->setSizeLimits (lay::W * 7 / 10, H * 7 / 10, lay::W * 8 / 5, H * 8 / 5);
+    }
+
+    // Alto del modo al ancho actual, salvo que asi no quepa en la pantalla:
+    // entonces se encoge como al abrir. Para el host es un setSize normal.
+    if (getWidth() > 0)
+    {
+        const int w = juce::jmin (getWidth(), juce::roundToInt (lay::W * fitForDisplay()));
+        setSize (w, juce::roundToInt (w * static_cast<float> (designHeight()) / lay::W));
+    }
+
+    content.repaint();
+    if (simple) refreshSummary();
+
+    if (save && uiPrefs != nullptr)
+    {
+        uiPrefs->setValue ("uiMode", simple ? "simple" : "full");
+        uiPrefs->saveIfNeeded();
+    }
+}
+
+void ReverseVerbEditor::refreshSummary()
+{
+    const juce::String sep (juce::CharPointer_UTF8 ("  ·  "));   // " · "
+    auto raw = [this] (const char* id) { return proc.apvts.getRawParameterValue (id)->load(); };
+    auto isDefault = [this] (const char* id)
+    {
+        auto* p = proc.apvts.getParameter (id);
+        return std::fabs (p->getValue() - p->getDefaultValue()) < 1.0e-4f;
+    };
+    // Solo lo que difiere del valor por defecto: lo que hay que saber, no
+    // todo. Si nada difiere, "por defecto".
+    auto item = [&] (juce::String& out, const char* id, const char* name, const juce::String& val)
+    {
+        if (isDefault (id)) return;
+        if (out.isNotEmpty()) out << sep;
+        out << name << " " << val;
+    };
+    auto pct = [&] (const char* id) { return juce::String (raw (id), 0); };
+    auto hz  = [&] (const char* id) { return juce::String (raw (id), 0) + " Hz"; };
+    auto ms  = [&] (const char* id) { return juce::String (raw (id), 0) + " ms"; };
+    auto onoff = [&] (const char* id) { return juce::String (raw (id) > 0.5f ? "on" : "off"); };
+    auto finish = [] (juce::String& out) { if (out.isEmpty()) out = TRANS ("default"); };
+
+    std::vector<SummaryStrip::Line> lines;
+
+    juce::String rv;
+    item (rv, "driveenv",  "Drive Env", pct ("driveenv"));
+    item (rv, "highpass",  "Low Cut",   hz ("highpass"));
+    item (rv, "lowpass",   "High Cut",  hz ("lowpass"));
+    item (rv, "hpsteep",   "LC 12 dB",  onoff ("hpsteep"));
+    item (rv, "freezerel", "Frz Rel",   ms ("freezerel"));
+    finish (rv);
+    lines.push_back ({ "Reverse", col::cyan, rv });
+
+    juce::String dl;
+    const int routing = static_cast<int> (raw ("routing"));
+    dl << TRANS (ReverseVerbProcessor::routingNames()[juce::jlimit (0, 3, routing)]);
+    if (routing != ReverseVerbProcessor::routeOff)
+    {
+        const bool sync = raw ("dsync") > 0.5f;
+        dl << sep
+           << (sync ? ReverseVerbProcessor::divisionNames()[juce::jlimit (0, 9, static_cast<int> (raw ("ddiv")))]
+                    : ms ("dtime"));
+        juce::String more;
+        item (more, "dfeed",     "fb",        pct ("dfeed"));
+        item (more, "pingpong",  "ping-pong", onoff ("pingpong"));
+        item (more, "dhigh",     "Low Cut",   hz ("dhigh"));
+        item (more, "dlow",      "High Cut",  hz ("dlow"));
+        item (more, "dmoddepth", "Mod",       pct ("dmoddepth"));
+        item (more, "parbal",    "Rev/Dly",   pct ("parbal"));
+        if (more.isNotEmpty()) dl << sep << more;
+    }
+    lines.push_back ({ "Delay", col::text.withAlpha (0.8f), dl });
+
+    juce::String tp;
+    item (tp, "wow",       "Wow",     pct ("wow"));
+    item (tp, "flutter",   "Flutter", pct ("flutter"));
+    item (tp, "detune",    "Detune",  juce::String (raw ("detune"), 0) + " c");
+    item (tp, "shimmer",   "Shimmer", pct ("shimmer"));
+    item (tp, "shimpitch", "Pitch",   juce::String (raw ("shimpitch"), 0) + " st");
+    finish (tp);
+    lines.push_back ({ "Tape", col::magenta, tp });
+
+    juce::String sp;
+    item (sp, "revdamp", "Damp",      pct ("revdamp"));
+    item (sp, "revpre",  "Pre-Delay", ms ("revpre"));
+    item (sp, "revmod",  "Mod",       pct ("revmod"));
+    if (raw ("revpost") < 0.5f) { if (sp.isNotEmpty()) sp << sep; sp << TRANS ("reverb BEFORE the reverse"); }
+    finish (sp);
+    lines.push_back ({ "Space", col::violet, sp });
+
+    juce::String ou;
+    item (ou, "duckrel", "Duck Rel", ms ("duckrel"));
+    item (ou, "outgain", "Output",   juce::String (raw ("outgain"), 1) + " dB");
+    finish (ou);
+    lines.push_back ({ "Output", col::amber, ou });
+
+    summary.setLines (std::move (lines));
 }
 
 void ReverseVerbEditor::stepPreset (int delta)
@@ -772,12 +1006,12 @@ void ReverseVerbEditor::stepPreset (int delta)
 
 void ReverseVerbEditor::showSaveDialog()
 {
-    dialog = std::make_unique<juce::AlertWindow> ("Guardar preset",
-                                                  "Nombre del preset:",
+    dialog = std::make_unique<juce::AlertWindow> (TRANS ("Save preset"),
+                                                  TRANS ("Preset name:"),
                                                   juce::MessageBoxIconType::NoIcon);
     dialog->addTextEditor ("name", proc.getPresets().currentName);
-    dialog->addButton ("Guardar",  1, juce::KeyPress (juce::KeyPress::returnKey));
-    dialog->addButton ("Cancelar", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    dialog->addButton (TRANS ("Save"),   1, juce::KeyPress (juce::KeyPress::returnKey));
+    dialog->addButton (TRANS ("Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
 
     // deleteWhenDismissed = false: la ventana es nuestra (unique_ptr), asi el
     // callback puede leer el texto sin tocar memoria liberada.
@@ -815,8 +1049,8 @@ void ReverseVerbEditor::showDeleteDialog()
     const auto name = users[idx];
 
     juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::WarningIcon,
-        "Borrar preset", "Se borrara \"" + name + "\" del disco.",
-        "Borrar", "Cancelar", nullptr,
+        TRANS ("Delete preset"), TRANS ("\"%s\" will be deleted from disk.").replace ("%s", name),
+        TRANS ("Delete"), TRANS ("Cancel"), nullptr,
         juce::ModalCallbackFunction::create ([this, name] (int result)
         {
             if (result == 1)
@@ -832,15 +1066,40 @@ void ReverseVerbEditor::resized()
     // El contenedor siempre mide el tamano de diseno; la ventana lo escala.
     const float scale = static_cast<float> (getWidth()) / static_cast<float> (lay::W);
     content.setTransform (juce::AffineTransform::scale (scale));
-    content.setBounds (0, 0, lay::W, lay::H);
+    content.setBounds (0, 0, lay::W, designHeight());
 
-    presetBox.setBounds (300, 12, 250, 24);
+    simpleBtn.setBounds (168, 12, 62, 24);
+    fullBtn  .setBounds (230, 12, 70, 24);
+    presetBox.setBounds (310, 12, 240, 24);
     prevBtn  .setBounds (556, 12,  26, 24);
     nextBtn  .setBounds (584, 12,  26, 24);
     saveBtn  .setBounds (616, 12,  70, 24);
     delBtn   .setBounds (690, 12,  66, 24);
 
     wormhole->setBounds (lay::margin, lay::viewY, lay::W - 2 * lay::margin, lay::viewH);
+
+    if (uiSimple)
+    {
+        auto big = [] (Knob& k, int col, int y)
+        {
+            const int w = lay::colW4(), x = lay::colX4 (col);
+            k.label .setBounds (x, y, w, 16);
+            k.slider.setBounds (x + w / 2 - 70, y + 18, 140, lay::sKnobH);
+        };
+        big (length, 0, lay::sRow1Y); big (revFb,   1, lay::sRow1Y); big (drive,   2, lay::sRow1Y); big (mix,  3, lay::sRow1Y);
+        big (revAmt, 0, lay::sRow2Y); big (revSize, 1, lay::sRow2Y); big (revShim, 2, lay::sRow2Y); big (duck, 3, lay::sRow2Y);
+
+        syncButton  .setBounds (lay::margin,       lay::sCtlY,  70, 22);
+        divisionBox .setBounds (lay::margin + 74,  lay::sCtlY,  90, 22);
+        freezeButton.setBounds (lay::margin + 178, lay::sCtlY,  90, 22);
+        routingBox  .setBounds (lay::margin + 282, lay::sCtlY, 150, 22);
+        tempoLabel  .setBounds (lay::margin + 444, lay::sCtlY,  48, 22);
+        tempoSlider .setBounds (lay::margin + 496, lay::sCtlY, 100, 22);
+        meters->setBounds (lay::margin + 608, lay::sCtlY - 6, lay::W - 2 * lay::margin - 608, 34);
+
+        summary.setBounds (lay::margin, lay::sSumY, lay::W - 2 * lay::margin, 5 * 16);
+        return;
+    }
 
     Knob* rev[] = { &length, &revFb, &drive, &driveEnv, &revLow, &revHigh };
     Knob* dly[] = { &dTime, &dFb, &dLow, &dHigh, &dMod, &dModRate };

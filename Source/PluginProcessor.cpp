@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "Localisation.h"
 
 #include <array>
 
@@ -68,7 +69,9 @@ juce::StringArray ReverseVerbProcessor::divisionNames()
 
 juce::StringArray ReverseVerbProcessor::routingNames()
 {
-    return { "Off", "Delay -> Rev", "Rev -> Delay", "Paralelo" };
+    // Ingles: son nombres de parametro que ve el host. La GUI los pasa por
+    // TRANS() al mostrarlos.
+    return { "Off", "Delay -> Rev", "Rev -> Delay", "Parallel" };
 }
 
 //==============================================================================
@@ -203,6 +206,8 @@ ReverseVerbProcessor::ReverseVerbProcessor()
           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
+    initLocalisation();   // antes de que exista el editor: sus botones traducen al construirse
+
     auto get = [this] (const char* id) { return apvts.getRawParameterValue (id); };
 
     pLength = get ("length");   pSync    = get ("sync");     pDivision = get ("division");

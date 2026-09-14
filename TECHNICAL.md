@@ -245,7 +245,7 @@ cmake -B build -DASIO_SDK_DIR="C:/SDKs/asiosdk"
 ```
 Source/
   PluginProcessor.{h,cpp}   APVTS, parámetros, ruteo, bus layout
-  PluginEditor.{h,cpp}      GUI: visualizador polar, knobs, medidores
+  PluginEditor.{h,cpp}      GUI: modos Simple/Completo, visualizador polar, knobs, medidores
   PresetManager.{h,cpp}     25 presets de fábrica + presets de usuario en %APPDATA%
   MidiControl.{h,cpp}       CC -> parámetro (learn), Program Change -> preset, tap tempo
   Interp.h                  Hermite de 4 puntos para lecturas fraccionarias
@@ -774,7 +774,33 @@ lleva su propio glide. Sigue el reset al reactivar (`reverbActive`).
 Parámetros nuevos: `revpre`, `revmod` (default 20 %), `revshim`. Los proyectos
 guardados con Freeverb los cogen por defecto al cargar.
 
-### GUI
+### GUI: Simple y Completo
+
+Dos layouts en el mismo editor, conmutados por un segmented control en la
+cabecera. **Simple**: ocho knobs de 140×146 (círculo de ~120 px, el doble
+que en Completo) en dos filas de cuatro (`Length`,
+`Feedback`, `Drive`, `Mix` / `Reverb`, `Size`, `Rev Shimmer`, `Duck`), la fila
+de Sync/Freeze/ruteo/tempo, medidores pequeños y una **tira de resumen**
+(`SummaryStrip`) con una línea por sección que lista solo lo que difiere del
+default ("por defecto" si nada). Sin esa tira un modo simple engaña: cargas
+*Cinta muerta*, ves ocho knobs normales y no sabes por qué suena a casete.
+Un clic en la tira pasa a Completo.
+
+- Es una preferencia de **interfaz**, no de sonido: no va en el estado del
+  proyecto ni se automatiza. Se guarda en `%APPDATA%\ReverseVerb\ReverseVerb.ui`
+  (archivo propio para no chocar con el `.settings` del Standalone). Default
+  para un usuario nuevo: Simple.
+- Conmutar no toca ningún parámetro. Lo oculto se hace `setVisible(false)`;
+  los attachments siguen vivos.
+- `setUiMode()` cambia la relación de aspecto del constrainer y hace un
+  `setSize` al alto del modo, reajustado a la pantalla si no cabe
+  (`fitForDisplay()`, el mismo cálculo que al abrir). Para el host es un
+  resize normal.
+- `BackPanel::simple` cambia cabeceras y el gradiente usa `getHeight()`.
+- Las constantes `lay_H`/`lay_HSimple` del header son espejo de `lay::` del
+  .cpp; un `static_assert` vigila que coincidan.
+
+### GUI: layout del modo Completo
 
 SPACE pasó a tener fila propia (6 knobs) y OUTPUT se quedó con Mix/Duck/Duck
 Rel y los medidores en las tres columnas libres. El diseño mide 780×884 y la
