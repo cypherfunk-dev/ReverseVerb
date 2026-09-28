@@ -50,11 +50,11 @@ countries: es mx ar cl co pe ve ec gt cu bo do hn py sv ni cr pa uy pr gq
 "Save" = "Guardar"
 "Delete" = "Borrar"
 "Cancel" = "Cancelar"
-"Factory" = "Fábrica"
+"Factory" = "Fabrica"
 "Yours" = "Tuyos"
 
-"REVERSE   (drive and filters act inside its loop)" = "REVERSE   (drive y filtros actúan dentro de su lazo)"
-"TAPE & PITCH   (act on the reverse engine)" = "TAPE Y PITCH   (actúan sobre el motor de reverse)"
+"REVERSE   (drive and filters act inside its loop)" = "REVERSE   (drive y filtros actuan dentro de su lazo)"
+"TAPE & PITCH   (act on the reverse engine)" = "TAPE Y PITCH   (actuan sobre el motor de reverse)"
 "SPACE   (plate; Shimmer uses the Shim Pitch above)" = "SPACE   (placa; Shimmer usa el Shim Pitch de arriba)"
 "What you don't see is still playing. Click to see it all." = "Lo que no se ve sigue sonando. Clic para verlo todo."
 "default" = "por defecto"
@@ -75,7 +75,7 @@ countries: es mx ar cl co pe ve ec gt cu bo do hn py sv ni cr pa uy pr gq
 "Save preset" = "Guardar preset"
 "Preset name:" = "Nombre del preset:"
 "Delete preset" = "Borrar preset"
-"\"%s\" will be deleted from disk." = "Se borrará \"%s\" del disco."
+"\"%s\" will be deleted from disk." = "Se borrara \"%s\" del disco."
 )i18n";
 
     juce::LocalisedStrings::setCurrentMappings (
